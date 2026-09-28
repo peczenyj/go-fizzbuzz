@@ -36,15 +36,6 @@ func DefaultParams() Params {
 	}
 }
 
-// SetDefaults method will set the initial default values.
-func (p *Params) SetDefaults() {
-	p.Int1 = defaultFizzDivisor
-	p.Int2 = defaultBuzzDivisor
-	p.Limit = defaultFizzBuzzLimit
-	p.Str1 = defaultFizzLabel
-	p.Str2 = defaultBuzzLabel
-}
-
 var (
 	// ErrMustBeBiggerThanZero public error.
 	ErrMustBeBiggerThanZero = errors.New("must be bigger than zero")
@@ -60,21 +51,21 @@ var (
 func (p *Params) Validate() error {
 	switch {
 	case p.Int1 <= 0:
-		return fmt.Errorf("invalid field 'Int1': %w", ErrMustBeBiggerThanZero)
+		return &ParamError{FieldInt1, ErrMustBeBiggerThanZero}
 	case p.Int2 <= 0:
-		return fmt.Errorf("invalid field 'Int2': %w", ErrMustBeBiggerThanZero)
+		return &ParamError{FieldInt2, ErrMustBeBiggerThanZero}
 	case p.Limit <= 0:
-		return fmt.Errorf("invalid field 'Limit': %w", ErrMustBeBiggerThanZero)
+		return &ParamError{FieldLimit, ErrMustBeBiggerThanZero}
 	case p.Limit > maxFizzBuzzLimit:
-		return fmt.Errorf("invalid field 'Limit': %w", ErrMustNotExceedMaxValue)
+		return &ParamError{FieldLimit, ErrMustNotExceedMaxValue}
 	case p.Str1 == "":
-		return fmt.Errorf("invalid field 'Str1': %w", ErrStringMustNotBeEmpty)
+		return &ParamError{FieldStr1, ErrStringMustNotBeEmpty}
 	case len(p.Str1) > maxFizzBuzzStringLength:
-		return fmt.Errorf("invalid field 'Str1': %w", ErrStringMustNotExceedMaxLength)
+		return &ParamError{FieldStr1, ErrStringMustNotExceedMaxLength}
 	case p.Str2 == "":
-		return fmt.Errorf("invalid field 'Str2': %w", ErrStringMustNotBeEmpty)
+		return &ParamError{FieldStr2, ErrStringMustNotBeEmpty}
 	case len(p.Str2) > maxFizzBuzzStringLength:
-		return fmt.Errorf("invalid field 'Str2': %w", ErrStringMustNotExceedMaxLength)
+		return &ParamError{FieldStr2, ErrStringMustNotExceedMaxLength}
 	}
 
 	return nil

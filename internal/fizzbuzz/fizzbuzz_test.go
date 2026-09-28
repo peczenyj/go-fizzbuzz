@@ -27,6 +27,7 @@ func TestGenerate(t *testing.T) {
 		label     string
 		params    fizzbuzz.Params
 		targetErr error
+		fieldErr  fizzbuzz.Field
 		expected  []string
 	}{
 		{
@@ -54,6 +55,13 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			label:  "should return first 15 elements of a different fizzbuzz sequence",
+			params: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "abc", Str2: "xyz"},
+			expected: []string{
+				"1", "2", "abc", "4", "xyz", "abc", "7", "8", "abc", "xyz", "11", "abc", "13", "14", "abcxyz",
+			},
+		},
+		{
 			label:  "should return first 15 elements of fizzfizz sequence",
 			params: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: "fizz"},
 			expected: []string{
@@ -78,41 +86,49 @@ func TestGenerate(t *testing.T) {
 			label:     "should return error if param 'Int1' is invalid (0)",
 			params:    fizzbuzz.Params{Int1: 0, Int2: 0, Limit: 0, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+			fieldErr:  `int1`,
 		},
 		{
 			label:     "should return error if param 'Int2' is invalid (0)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 0, Limit: 0, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+			fieldErr:  `int2`,
 		},
 		{
 			label:     "should return error if param 'Limit' is invalid (0)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 0, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+			fieldErr:  `limit`,
 		},
 		{
 			label:     "should return error if param 'Str1' is invalid (empty)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrStringMustNotBeEmpty,
+			fieldErr:  `str1`,
 		},
 		{
 			label:     "should return error if param 'Str2' is invalid (empty)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "fizz", Str2: ""},
 			targetErr: fizzbuzz.ErrStringMustNotBeEmpty,
+			fieldErr:  `str2`,
 		},
 		{
 			label:     "should return error if param 'Limit' is invalid (bigger than 1024)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 1025, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrMustNotExceedMaxValue,
+			fieldErr:  `limit`,
 		},
 		{
 			label:     "should return error if param 'Str1' is invalid (bigger than 64 chars)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "12345678901234567890123456789012345678901234567890123456789012345", Str2: ""},
 			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
+			fieldErr:  `str1`,
 		},
 		{
 			label:     "should return error if param 'Str2' is invalid (bigger than 64 chars)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "x", Str2: "12345678901234567890123456789012345678901234567890123456789012345"},
 			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
+			fieldErr:  `str2`,
 		},
 	}
 
@@ -128,6 +144,15 @@ func TestGenerate(t *testing.T) {
 
 				if !errors.Is(err, tc.targetErr) {
 					t.Fatalf("unexpected error (got: %v, expects: %v", err, tc.targetErr)
+				}
+
+				pe, ok := errors.AsType[*fizzbuzz.ParamError](err)
+				if !ok {
+					t.Fatalf("error is not a ParamError (got: %v)", err)
+				}
+
+				if pe.Field != tc.fieldErr {
+					t.Fatalf("unexpected field (got: %v, expected; %v)", pe.Field, tc.fieldErr)
 				}
 
 				return

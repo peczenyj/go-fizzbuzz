@@ -39,7 +39,7 @@ func TestFizzBuzzHandler(t *testing.T) {
 	testcases := []struct {
 		label    string
 		target   string
-		errMsg   string
+		errBody  *api.ErrorBody
 		expected []string
 	}{
 		{
@@ -57,9 +57,24 @@ func TestFizzBuzzHandler(t *testing.T) {
 			},
 		},
 		{
-			label:  "should return error if limit is not a number",
-			target: "/fizzbuzz?int1=3&int2=5&limit=ops&str1=fizz&str2=buzz",
-			errMsg: `error: unable to parse query string: unable to convert param 'limit' to integer: strconv.Atoi: parsing "ops": invalid syntax`,
+			label:   "should return error if int1 is not a number",
+			target:  "/fizzbuzz?int1=lol&int2=5&limit=15&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int1`, Reason: `must be an integer`},
+		},
+		{
+			label:   "should return error if int2 is not a number",
+			target:  "/fizzbuzz?int1=3&int2=hehe&limit=ops&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int2`, Reason: `must be an integer`},
+		},
+		{
+			label:   "should return error if limit is not a number",
+			target:  "/fizzbuzz?int1=3&int2=5&limit=ops&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `limit`, Reason: `must be an integer`},
+		},
+		{
+			label:   "should return error if limit is not allowed",
+			target:  "/fizzbuzz?int1=3&int2=5&limit=4096&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `limit`, Reason: `must not exceed max value 1024`},
 		},
 	}
 
@@ -76,15 +91,26 @@ func TestFizzBuzzHandler(t *testing.T) {
 			response := w.Result()
 			body, _ := io.ReadAll(response.Body)
 
-			if tc.errMsg != "" {
+			if tc.errBody != nil {
 				if response.StatusCode != http.StatusBadRequest {
 					t.Fatalf("unexpected http status code from endpoint /fizzbuzz (got: %v, expected: %v)", response.StatusCode, http.StatusBadRequest)
 				}
 
-				got := string(body)
+				if contentType := response.Header.Get(api.ContentTypeHeaderName); contentType != api.ContentTypeApplicationJSON {
+					t.Fatalf("unexpected content type (got: %v, expected %v)", contentType, api.ContentTypeApplicationJSON)
+				}
 
-				if got != tc.errMsg {
-					t.Fatalf("unexpected error message (got: %v, expected: %v)", got, tc.errMsg)
+				var got api.ErrorBody
+
+				t.Logf("body: %s", string(body))
+
+				err := json.NewDecoder(bytes.NewReader(body)).Decode(&got)
+				if err != nil {
+					t.Fatalf("unexpected error while decode http response body: %v", err)
+				}
+
+				if got != *tc.errBody {
+					t.Fatalf("unexpected result (got: %+v, expect: %+v)", got, tc.errBody)
 				}
 
 				return

@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -25,27 +25,22 @@ func Healthz(w http.ResponseWriter, _ *http.Request) {
 func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 	params, err := parseParams(r.URL.Query())
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "error: unable to parse query string: %v", err)
+		writeError(w, err)
 
 		return
 	}
 
 	result, err := fizzbuzz.Generate(params)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "error: %v", err)
+		writeError(w, err)
 
 		return
 	}
 
-	w.Header().Set(ContentTypeHeaderName, ContentTypeApplicationJSON)
-
-	err = json.NewEncoder(w).Encode(result)
-	if err != nil {
-		slog.Warn("unexpected error while perform json encode", slog.Any("error", err))
-	}
+	writeJSON(w, http.StatusOK, result)
 }
+
+var ErrNotAnInteger = errors.New(`must be an integer`)
 
 func parseParams(query url.Values) (params fizzbuzz.Params, err error) {
 	params = fizzbuzz.DefaultParams()
@@ -53,21 +48,21 @@ func parseParams(query url.Values) (params fizzbuzz.Params, err error) {
 	if query.Has("int1") {
 		params.Int1, err = strconv.Atoi(query.Get("int1"))
 		if err != nil {
-			return params, fmt.Errorf("unable to convert param 'int1' to integer: %w", err)
+			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldInt1, Err: ErrNotAnInteger}
 		}
 	}
 
 	if query.Has("int2") {
 		params.Int2, err = strconv.Atoi(query.Get("int2"))
 		if err != nil {
-			return params, fmt.Errorf("unable to convert param 'int2' to integer: %w", err)
+			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldInt2, Err: ErrNotAnInteger}
 		}
 	}
 
 	if query.Has("limit") {
 		params.Limit, err = strconv.Atoi(query.Get("limit"))
 		if err != nil {
-			return params, fmt.Errorf("unable to convert param 'limit' to integer: %w", err)
+			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldLimit, Err: ErrNotAnInteger}
 		}
 	}
 
@@ -80,4 +75,39 @@ func parseParams(query url.Values) (params fizzbuzz.Params, err error) {
 	}
 
 	return params, nil
+}
+
+func writeJSON(w http.ResponseWriter, statusCode int, result any) {
+	w.Header().Set(ContentTypeHeaderName, ContentTypeApplicationJSON)
+
+	w.WriteHeader(statusCode)
+
+	err := json.NewEncoder(w).Encode(result)
+	if err != nil {
+		slog.Warn("unexpected error while perform json encode on result",
+			slog.Any("result", result),
+			slog.Any("error", err))
+	}
+}
+
+type ErrorBody struct {
+	Error  string `json:"error"`
+	Field  string `json:"field,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+func writeError(w http.ResponseWriter, err error) {
+	if pe, ok := errors.AsType[*fizzbuzz.ParamError](err); ok {
+		writeJSON(w, http.StatusBadRequest, &ErrorBody{
+			Error:  `invalid parameter`,
+			Field:  string(pe.Field),
+			Reason: pe.Err.Error(),
+		})
+
+		return
+	}
+
+	slog.Error("unexpected error", slog.Any("error", err))
+
+	writeJSON(w, http.StatusInternalServerError, &ErrorBody{Error: err.Error()})
 }
