@@ -6,6 +6,7 @@ import (
 
 var _ error = (*ParamError)(nil)
 
+// ParamError custom error type.
 type ParamError struct {
 	Field Field
 	Err   error

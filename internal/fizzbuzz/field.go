@@ -1,5 +1,6 @@
 package fizzbuzz
 
+// Field is a tiny type to help desambiguate a field from a string.
 type Field string
 
 const (

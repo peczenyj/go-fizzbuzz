@@ -16,7 +16,7 @@ const (
 	maxFizzBuzzStringLength = 64
 )
 
-// Param represents the fizzzbuzz generate function parameters.
+// Param represents the fizzbuzz generate function parameters.
 type Params struct {
 	Int1  int
 	Int2  int
