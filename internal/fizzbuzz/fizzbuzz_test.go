@@ -8,6 +8,18 @@ import (
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
+func TestDefaultParams(t *testing.T) {
+	t.Parallel()
+
+	params := fizzbuzz.DefaultParams()
+
+	expected := fizzbuzz.Params{3, 5, 100, "fizz", "buzz"}
+
+	if params != expected {
+		t.Fatalf("unexpected default params (got: %v, expected: %v)", params, expected)
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
@@ -42,9 +54,65 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			label:     "should return error if param is invalid",
-			params:    fizzbuzz.Params{},
+			label:  "should return first 15 elements of fizzfizz sequence",
+			params: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: "fizz"},
+			expected: []string{
+				"1", "2", "fizz", "4", "fizz", "fizz", "7", "8", "fizz", "fizz", "11", "fizz", "13", "14", "fizzfizz",
+			},
+		},
+		{
+			label:  "should return first 15 elements of sequence without fizz or buzz",
+			params: fizzbuzz.Params{Int1: 30, Int2: 50, Limit: 15, Str1: "fizz", Str2: "fizz"},
+			expected: []string{
+				"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+			},
+		},
+		{
+			label:  "should return first 10 elements of sequence with fizz+buzz",
+			params: fizzbuzz.Params{Int1: 2, Int2: 2, Limit: 10, Str1: "fizz", Str2: "buzz"},
+			expected: []string{
+				"1", "fizzbuzz", "3", "fizzbuzz", "5", "fizzbuzz", "7", "fizzbuzz", "9", "fizzbuzz",
+			},
+		},
+		{
+			label:     "should return error if param 'Int1' is invalid (0)",
+			params:    fizzbuzz.Params{Int1: 0, Int2: 0, Limit: 0, Str1: "", Str2: ""},
 			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+		},
+		{
+			label:     "should return error if param 'Int2' is invalid (0)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 0, Limit: 0, Str1: "", Str2: ""},
+			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+		},
+		{
+			label:     "should return error if param 'Limit' is invalid (0)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 0, Str1: "", Str2: ""},
+			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
+		},
+		{
+			label:     "should return error if param 'Str1' is invalid (empty)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "", Str2: ""},
+			targetErr: fizzbuzz.ErrStringMustNotBeEmpty,
+		},
+		{
+			label:     "should return error if param 'Str2' is invalid (empty)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "fizz", Str2: ""},
+			targetErr: fizzbuzz.ErrStringMustNotBeEmpty,
+		},
+		{
+			label:     "should return error if param 'Limit' is invalid (bigger than 1024)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 1025, Str1: "", Str2: ""},
+			targetErr: fizzbuzz.ErrMustNotExceedMaxValue,
+		},
+		{
+			label:     "should return error if param 'Str1' is invalid (bigger than 64 chars)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "12345678901234567890123456789012345678901234567890123456789012345", Str2: ""},
+			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
+		},
+		{
+			label:     "should return error if param 'Str2' is invalid (bigger than 64 chars)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "x", Str2: "12345678901234567890123456789012345678901234567890123456789012345"},
+			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
 		},
 	}
 

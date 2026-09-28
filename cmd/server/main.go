@@ -46,7 +46,7 @@ func RunServer(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", api.Healthz)
-	mux.HandleFunc("GET /fizzbuzz", api.Handler)
+	mux.HandleFunc("GET /fizzbuzz", api.FizzBuzz)
 
 	server := &http.Server{
 		Addr:              defaultListenerAddress,
