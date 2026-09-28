@@ -25,6 +25,17 @@ type Params struct {
 	Str2  string
 }
 
+// DefaultParams returns a Params struct filled with all default values.
+func DefaultParams() Params {
+	return Params{
+		Int1:  defaultFizzDivisor,
+		Int2:  defaultBuzzDivisor,
+		Limit: defaultFizzBuzzLimit,
+		Str1:  defaultFizzLabel,
+		Str2:  defaultBuzzLabel,
+	}
+}
+
 // SetDefaults method will set the initial default values.
 func (p *Params) SetDefaults() {
 	p.Int1 = defaultFizzDivisor
@@ -35,31 +46,35 @@ func (p *Params) SetDefaults() {
 }
 
 var (
-	errMustBeBiggerThanZero         = errors.New("must be bigger than zero")
-	errMustNotExceedMaxValue        = fmt.Errorf("must not exceed max value %d", maxFizzBuzzLimit)
-	errStringMustNotBeEmpty         = errors.New("must not be empty string")
-	errStringMustNotExceedMaxLength = fmt.Errorf("must not exceed max string length %d", maxFizzBuzzStringLength)
+	// ErrMustBeBiggerThanZero public error.
+	ErrMustBeBiggerThanZero = errors.New("must be bigger than zero")
+	// ErrMustNotExceedMaxValue public error.
+	ErrMustNotExceedMaxValue = fmt.Errorf("must not exceed max value %d", maxFizzBuzzLimit)
+	// ErrStringMustNotBeEmpty public error.
+	ErrStringMustNotBeEmpty = errors.New("must not be empty string")
+	// ErrStringMustNotExceedMaxLength public error.
+	ErrStringMustNotExceedMaxLength = fmt.Errorf("must not exceed max string length %d", maxFizzBuzzStringLength)
 )
 
 // Validate inspect params values.
 func (p *Params) Validate() error {
 	switch {
 	case p.Int1 <= 0:
-		return fmt.Errorf("invalid field 'Int1': %w", errMustBeBiggerThanZero)
+		return fmt.Errorf("invalid field 'Int1': %w", ErrMustBeBiggerThanZero)
 	case p.Int2 <= 0:
-		return fmt.Errorf("invalid field 'Int2': %w", errMustBeBiggerThanZero)
+		return fmt.Errorf("invalid field 'Int2': %w", ErrMustBeBiggerThanZero)
 	case p.Limit <= 0:
-		return fmt.Errorf("invalid field 'Limit': %w", errMustBeBiggerThanZero)
+		return fmt.Errorf("invalid field 'Limit': %w", ErrMustBeBiggerThanZero)
 	case p.Limit > maxFizzBuzzLimit:
-		return fmt.Errorf("invalid field 'Limit': %w", errMustNotExceedMaxValue)
+		return fmt.Errorf("invalid field 'Limit': %w", ErrMustNotExceedMaxValue)
 	case p.Str1 == "":
-		return fmt.Errorf("invalid field 'Str1': %w", errStringMustNotBeEmpty)
+		return fmt.Errorf("invalid field 'Str1': %w", ErrStringMustNotBeEmpty)
 	case len(p.Str1) > maxFizzBuzzStringLength:
-		return fmt.Errorf("invalid field 'Str1': %w", errStringMustNotExceedMaxLength)
+		return fmt.Errorf("invalid field 'Str1': %w", ErrStringMustNotExceedMaxLength)
 	case p.Str2 == "":
-		return fmt.Errorf("invalid field 'Str2': %w", errStringMustNotBeEmpty)
+		return fmt.Errorf("invalid field 'Str2': %w", ErrStringMustNotBeEmpty)
 	case len(p.Str2) > maxFizzBuzzStringLength:
-		return fmt.Errorf("invalid field 'Str2': %w", errStringMustNotExceedMaxLength)
+		return fmt.Errorf("invalid field 'Str2': %w", ErrStringMustNotExceedMaxLength)
 	}
 
 	return nil

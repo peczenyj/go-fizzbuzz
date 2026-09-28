@@ -48,8 +48,19 @@ To create the docker image you can do:
 $ docker build . 
 ```
 
+## API
 
-## 
+### the /fizzbuzz endpoint
+
+This endpoint responds to HTTP verb GET only, it expect up to 5 parameters ( `int1`, `int2`, `limit`, `str1`, `str2` ) and will return a json response with the fizzbuzz sequence if the parameters are considered valid.
+
+### the /healthz endpoint
+
+This endpoint is used both readiness and liveness probes for kubernetes. Returns a simple HTTP 200 OK response.
+
+## the /metrics endpoint
+
+TBD
 
 ## Design Decisions
 
@@ -61,3 +72,15 @@ In order to be easier to maintain by other developers and be ready to production
 - Output will be a JSON array of strings: this format helps to escape the input strings and avoid any ambiguity.
 - Omitted parameters take the fizzbuzz classic defaults. Invalid values will be rejected.
 - Inputs are bounded to certain limits in order to keep the response size under control and avoid a denial of service risk.
+
+## Limitations
+
+TBD
+
+## Development 
+
+TBD
+
+## How I worked.
+
+TBD

@@ -1,6 +1,8 @@
 package fizzbuzz_test
 
 import (
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
@@ -10,10 +12,10 @@ func TestGenerate(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		label    string
-		params   fizzbuzz.Params
-		errMsg   string
-		expected []string
+		label     string
+		params    fizzbuzz.Params
+		targetErr error
+		expected  []string
 	}{
 		{
 			label:    "should return one element if limit is 1",
@@ -40,9 +42,9 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			label:  "should return error if param is invalid",
-			params: fizzbuzz.Params{},
-			errMsg: "unable to generate fizzbuzz sequence: invalid field 'Int1': must be bigger than zero",
+			label:     "should return error if param is invalid",
+			params:    fizzbuzz.Params{},
+			targetErr: fizzbuzz.ErrMustBeBiggerThanZero,
 		},
 	}
 
@@ -51,13 +53,13 @@ func TestGenerate(t *testing.T) {
 			t.Parallel()
 
 			result, err := fizzbuzz.Generate(tc.params)
-			if tc.errMsg != "" {
+			if tc.targetErr != nil {
 				if err == nil {
-					t.Fatalf("expected error %q, got nil", tc.errMsg)
+					t.Fatalf("unexpected nil error (expects: %v)", tc.targetErr)
 				}
 
-				if tc.errMsg != err.Error() {
-					t.Fatalf("expected error %q, got %q", tc.errMsg, err.Error())
+				if !errors.Is(err, tc.targetErr) {
+					t.Fatalf("unexpected error (got: %v, expects: %v", err, tc.targetErr)
 				}
 
 				return
@@ -67,14 +69,8 @@ func TestGenerate(t *testing.T) {
 				t.Fatalf("unexpected error from generate: %v", err)
 			}
 
-			if len(result) != len(tc.expected) {
-				t.Fatalf("insufficient result (got %d elements, expects %d)", len(result), len(tc.expected))
-			}
-
-			for index, element := range result {
-				if element != tc.expected[index] {
-					t.Fatalf("element mismatch at position %d (got %v, expects %v)", index, element, tc.expected[index])
-				}
+			if !slices.Equal(result, tc.expected) {
+				t.Fatalf("unexpected result (got: %v, expect: %v)", result, tc.expected)
 			}
 		})
 	}
