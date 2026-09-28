@@ -5,15 +5,31 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
 // Handle is the fizbuzz handler.
-func Handler(w http.ResponseWriter, _ *http.Request) {
-	var params fizzbuzz.Params
+func Handler(w http.ResponseWriter, r *http.Request) {
+	var (
+		params fizzbuzz.Params
+		err    error
+	)
 
 	params.SetDefaults()
+
+	query := r.URL.Query()
+
+	if query.Has("int1") {
+		params.Int1, err = strconv.Atoi(query.Get("int1"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "error: unable to parse param 'int1': %v", err)
+
+			return
+		}
+	}
 
 	result, err := fizzbuzz.Generate(params)
 	if err != nil {
