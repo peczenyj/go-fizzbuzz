@@ -50,11 +50,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if query.Has("str1") {
-		params.Str1 = query.Get("int1")
+		params.Str1 = query.Get("str1")
 	}
 
 	if query.Has("str2") {
-		params.Str2 = query.Get("int2")
+		params.Str2 = query.Get("str2")
 	}
 
 	result, err := fizzbuzz.Generate(params)
