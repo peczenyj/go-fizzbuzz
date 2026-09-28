@@ -45,6 +45,7 @@ func RunServer(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /healthz", api.Healthz)
 	mux.HandleFunc("GET /fizzbuzz", api.Handler)
 
 	server := &http.Server{

@@ -30,3 +30,8 @@ func Handler(w http.ResponseWriter, _ *http.Request) {
 		slog.Warn("unexpected error while perform json encode", slog.Any("error", err))
 	}
 }
+
+// Healthz k8s api health endpoint.
+func Healthz(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
