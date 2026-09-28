@@ -30,6 +30,32 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if query.Has("int2") {
+		params.Int2, err = strconv.Atoi(query.Get("int2"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "error: unable to parse param 'int2': %v", err)
+
+			return
+		}
+	}
+	if query.Has("limit") {
+		params.Limit, err = strconv.Atoi(query.Get("limit"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "error: unable to parse param 'limit': %v", err)
+
+			return
+		}
+	}
+
+	if query.Has("str1") {
+		params.Str1 = query.Get("int1")
+	}
+
+	if query.Has("str2") {
+		params.Str2 = query.Get("int2")
+	}
 
 	result, err := fizzbuzz.Generate(params)
 	if err != nil {
