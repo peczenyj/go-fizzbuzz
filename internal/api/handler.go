@@ -40,7 +40,7 @@ func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// ErrNotAnInteger guard error.
+// ErrNotAnInteger is returned when a numeric query parameter cannot be parsed.
 var ErrNotAnInteger = errors.New(`must be an integer`)
 
 func parseParams(query url.Values) (params fizzbuzz.Params, err error) {
