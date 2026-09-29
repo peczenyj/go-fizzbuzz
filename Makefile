@@ -24,6 +24,9 @@ cover: ## Run tests with a coverage summary
 	$(GO) test -race -covermode=atomic -coverprofile=coverage.out ./...
 	$(GO) tool cover -func=coverage.out | tail -1
 
+fuzz: ## Fuzz Generate for FUZZTIME (default 30s)
+	$(GO) test ./internal/fizzbuzz -run='^$$' -fuzz=FuzzGenerate -fuzztime=$(FUZZTIME)
+
 lint: ## go vet + golangci-lint
 	$(GO) vet ./...
 	golangci-lint run ./...
@@ -35,7 +38,7 @@ tidy: ## go mod tidy + verify
 	$(GO) mod tidy && $(GO) mod verify
 
 docker: ## Build the Docker image
-	docker build --build-arg VERSION=$(VERSION) --build-arg REVISION=$(REVISION)  --build-arg CREATED=$$(date -u +%Y-%m-%dT%H:%M:%SZ) -t go-fizzbuzz:$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) --build-arg REVISION=$(REVISION) --build-arg CREATED=$$(date -u +%Y-%m-%dT%H:%M:%SZ) -t go-fizzbuzz:$(VERSION) .
 
 clean: ## Remove build artefacts
 	rm -rf bin coverage.out

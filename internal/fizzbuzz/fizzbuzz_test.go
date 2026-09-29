@@ -22,6 +22,8 @@ func TestDefaultParams(t *testing.T) {
 }
 
 func TestParseParams(t *testing.T) {
+	t.Parallel()
+
 	testcases := []struct {
 		label    string
 		query    string
@@ -45,6 +47,26 @@ func TestParseParams(t *testing.T) {
 			expected: fizzbuzz.Params{3, 5, 15, "fizz", "buzz"},
 		},
 		{
+			label:    "first value wins",
+			query:    "int1=2&int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{2, 5, 15, "fizz", "buzz"},
+		},
+		{
+			label:    "should parse explicit positive number (+ must be url encoded)",
+			query:    "int1=%2B3&int2=5&limit=15&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{3, 5, 15, "fizz", "buzz"},
+		},
+		{
+			label:    "should parse negative number",
+			query:    "int1=3&int2=-5&limit=15&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{3, -5, 15, "fizz", "buzz"},
+		},
+		{
+			label:    "should parse zero as integer",
+			query:    "int1=3&int2=5&limit=0&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{3, 5, 0, "fizz", "buzz"},
+		},
+		{
 			label:    "should return default params with limit of 15 and alternate strings",
 			query:    "int1=3&int2=5&limit=15&str1=abc&str2=xyz",
 			expected: fizzbuzz.Params{3, 5, 15, "abc", "xyz"},
@@ -57,6 +79,30 @@ func TestParseParams(t *testing.T) {
 		{
 			label:    "should return error if int1 is not a number",
 			query:    "int1=lol&int2=5&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int1`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if int1 is present but empty",
+			query:    "int1=&int2=5&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int1`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if int1 is a number but not trimmed (with a space in front, urlencoded)",
+			query:    "int1=%203&int2=5&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int1`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if int1 is a number but not trimmed (with a space in front, using + sign)",
+			query:    "int1=+3&int2=5&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int1`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if int1 overflows",
+			query:    "int1=99999999999999999999&int2=5&limit=15&str1=fizz&str2=buzz",
 			fieldErr: `int1`,
 			err:      fizzbuzz.ErrNotAnInteger,
 		},
