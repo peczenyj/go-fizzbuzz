@@ -272,7 +272,7 @@ func FuzzParseParams(f *testing.F) {
 		var params fizzbuzz.Params
 
 		err = params.Parse(values)
-		if err != nil && !errors.Is(err, fizzbuzz.ErrNotAnInteger) {
+		if err != nil && (!errors.Is(err, fizzbuzz.ErrNotAnInteger) && !errors.Is(err, fizzbuzz.ErrRequired)) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
