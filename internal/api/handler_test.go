@@ -10,12 +10,15 @@ import (
 	"testing"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/api"
+	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
 func TestHealthz(t *testing.T) {
 	t.Parallel()
 
-	statusCode, responseBody, _ := doRequest(t, api.Healthz, "/healthz")
+	handler := api.New(fizzbuzz.DefaultGenerator())
+
+	statusCode, responseBody, _ := doRequest(t, handler, http.MethodGet, "/healthz")
 
 	if statusCode != http.StatusOK {
 		t.Fatalf("unexpected http status code from endpoint /healthz (got: %v, expected: %v)", statusCode, http.StatusOK)
@@ -191,7 +194,9 @@ func TestFizzBuzzHandler(t *testing.T) {
 		t.Run(tc.label, func(t *testing.T) {
 			t.Parallel()
 
-			statusCode, responseBody, responseHeaders := doRequest(t, api.FizzBuzz, tc.target)
+			handler := api.New(fizzbuzz.DefaultGenerator())
+
+			statusCode, responseBody, responseHeaders := doRequest(t, handler, http.MethodGet, tc.target)
 
 			if tc.errBody != nil {
 				if statusCode != http.StatusBadRequest {
@@ -251,8 +256,8 @@ func TestFizzBuzzHandler(t *testing.T) {
 }
 
 func doRequest(t *testing.T,
-	handleFunc func(w http.ResponseWriter, r *http.Request),
-	target string,
+	handler http.Handler,
+	method, target string,
 ) (
 	statusCode int,
 	body []byte,
@@ -260,11 +265,11 @@ func doRequest(t *testing.T,
 ) {
 	t.Helper()
 
-	request := httptest.NewRequest(http.MethodGet, target, nil)
+	request := httptest.NewRequest(method, target, nil)
 
 	w := httptest.NewRecorder()
 
-	handleFunc(w, request)
+	handler.ServeHTTP(w, request)
 
 	response := w.Result()
 	body, err := io.ReadAll(response.Body)

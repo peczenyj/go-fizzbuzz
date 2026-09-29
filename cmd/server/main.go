@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/api"
+	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
 const (
@@ -48,14 +49,9 @@ func MainWithExitCode(ctx context.Context) int {
 
 // RunServer start an http server and register the api handler.
 func RunServer(ctx context.Context) error {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /healthz", api.Healthz)
-	mux.HandleFunc("GET /fizzbuzz", api.FizzBuzz)
-
 	server := &http.Server{
 		Addr:              defaultListenerAddress,
-		Handler:           mux,
+		Handler:           api.New(fizzbuzz.DefaultGenerator()),
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 	}
 

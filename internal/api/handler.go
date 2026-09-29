@@ -10,21 +10,49 @@ import (
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
-var _ fizzbuzz.QueryValues = url.Values{}
+var (
+	_ fizzbuzz.QueryValues = url.Values{}
+	_ Generator            = (*fizzbuzz.Generator)(nil)
+	_ http.Handler         = (*API)(nil)
+)
 
 const (
 	contentTypeHeader = `Content-Type`
 	mediaTypeJSON     = `application/json`
 )
 
-// Healthz reports liveness and readiness: it always returns 200 with an empty body.
-func Healthz(w http.ResponseWriter, _ *http.Request) {
+// Generator produces a fizzbuzz sequence; *fizzbuzz.Generator implements it.
+type Generator interface {
+	Generate(p fizzbuzz.Params) ([]string, error)
+}
+
+// API is the HTTP interface of the service. It routes requests itself, so
+// tests exercise the same routing as production.
+type API struct {
+	mux       *http.ServeMux
+	generator Generator
+}
+
+// New returns an API serving /healthz and /fizzbuzz with gen.
+// It panics if gen is nil: that is a wiring bug, not a runtime condition.
+func New(gen Generator) *API {
+	if gen == nil {
+		panic("api.New: nil Generator")
+	}
+	a := &API{mux: http.NewServeMux(), generator: gen}
+	a.mux.HandleFunc("GET /healthz", a.handleHealthz)
+	a.mux.HandleFunc("GET /fizzbuzz", a.handleFizzBuzz)
+	return a
+}
+
+// ServeHTTP implements http.Handler.
+func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) { a.mux.ServeHTTP(w, r) }
+
+func (a *API) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// FizzBuzz serves GET /fizzbuzz: it parses the five query parameters and returns
-// the sequence as a JSON array of strings, or a 400 ErrorBody naming the invalid field.
-func FizzBuzz(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 	var params fizzbuzz.Params
 
 	err := params.Parse(r.URL.Query())
@@ -34,9 +62,7 @@ func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	generator := fizzbuzz.DefaultGenerator()
-
-	result, err := generator.Generate(params)
+	result, err := a.generator.Generate(params)
 	if err != nil {
 		writeError(w, err)
 
