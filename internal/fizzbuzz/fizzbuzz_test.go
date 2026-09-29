@@ -14,7 +14,7 @@ func TestDefaultParams(t *testing.T) {
 
 	params := fizzbuzz.DefaultParams()
 
-	expected := fizzbuzz.Params{3, 5, 100, "fizz", "buzz"}
+	expected := fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"}
 
 	if params != expected {
 		t.Fatalf("unexpected default params (got: %v, expected: %v)", params, expected)
@@ -34,47 +34,47 @@ func TestParseParams(t *testing.T) {
 		{
 			label:    "should return default params if no query string is present",
 			query:    "",
-			expected: fizzbuzz.Params{3, 5, 100, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should ignore non supported query strings",
 			query:    "lol=hehe",
-			expected: fizzbuzz.Params{3, 5, 100, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return default params with limit of 15",
 			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{3, 5, 15, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "first value wins",
 			query:    "int1=2&int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{2, 5, 15, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 2, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse explicit positive number (+ must be url encoded)",
 			query:    "int1=%2B3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{3, 5, 15, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse negative number",
 			query:    "int1=3&int2=-5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{3, -5, 15, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: -5, Limit: 15, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse zero as integer",
 			query:    "int1=3&int2=5&limit=0&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{3, 5, 0, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 0, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return default params with limit of 15 and alternate strings",
 			query:    "int1=3&int2=5&limit=15&str1=abc&str2=xyz",
-			expected: fizzbuzz.Params{3, 5, 15, "abc", "xyz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"abc", Str2: "xyz"},
 		},
 		{
 			label:    "should return default params with limit of 1",
 			query:    "int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{3, 5, 1, "fizz", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 1, Str1:"fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return error if int1 is not a number",
@@ -121,12 +121,12 @@ func TestParseParams(t *testing.T) {
 		{
 			label:    "should return param with explicit empty str1",
 			query:    "int1=3&int2=5&limit=15&str1=&str2=buzz",
-			expected: fizzbuzz.Params{3, 5, 15, "", "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"", Str2: "buzz"},
 		},
 		{
 			label:    "should return param with explicit empty str2",
 			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=",
-			expected: fizzbuzz.Params{3, 5, 15, "fizz", ""},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: ""},
 		},
 	}
 
