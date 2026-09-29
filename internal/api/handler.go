@@ -6,10 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
+
+var _ fizzbuzz.QueryValues = url.Values{}
 
 const (
 	ContentTypeHeaderName      = `Content-Type`
@@ -23,7 +24,7 @@ func Healthz(w http.ResponseWriter, _ *http.Request) {
 
 // FizzBuzz is the http fizzbuzz handler.
 func FizzBuzz(w http.ResponseWriter, r *http.Request) {
-	params, err := parseParams(r.URL.Query())
+	params, err := fizzbuzz.ParseParams(r.URL.Query())
 	if err != nil {
 		writeError(w, err)
 
@@ -38,44 +39,6 @@ func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
-}
-
-// ErrNotAnInteger is returned when a numeric query parameter cannot be parsed.
-var ErrNotAnInteger = errors.New(`must be an integer`)
-
-func parseParams(query url.Values) (params fizzbuzz.Params, err error) {
-	params = fizzbuzz.DefaultParams()
-
-	if query.Has("int1") {
-		params.Int1, err = strconv.Atoi(query.Get("int1"))
-		if err != nil {
-			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldInt1, Err: ErrNotAnInteger}
-		}
-	}
-
-	if query.Has("int2") {
-		params.Int2, err = strconv.Atoi(query.Get("int2"))
-		if err != nil {
-			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldInt2, Err: ErrNotAnInteger}
-		}
-	}
-
-	if query.Has("limit") {
-		params.Limit, err = strconv.Atoi(query.Get("limit"))
-		if err != nil {
-			return params, &fizzbuzz.ParamError{Field: fizzbuzz.FieldLimit, Err: ErrNotAnInteger}
-		}
-	}
-
-	if query.Has("str1") {
-		params.Str1 = query.Get("str1")
-	}
-
-	if query.Has("str2") {
-		params.Str2 = query.Get("str2")
-	}
-
-	return params, nil
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, result any) {

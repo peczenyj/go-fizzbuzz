@@ -51,24 +51,69 @@ var (
 func (p *Params) Validate() error {
 	switch {
 	case p.Int1 <= 0:
-		return &ParamError{FieldInt1, ErrMustBeBiggerThanZero}
+		return &ParamError{Field: FieldInt1, Err: ErrMustBeBiggerThanZero}
 	case p.Int2 <= 0:
-		return &ParamError{FieldInt2, ErrMustBeBiggerThanZero}
+		return &ParamError{Field: FieldInt2, Err: ErrMustBeBiggerThanZero}
 	case p.Limit <= 0:
-		return &ParamError{FieldLimit, ErrMustBeBiggerThanZero}
+		return &ParamError{Field: FieldLimit, Err: ErrMustBeBiggerThanZero}
 	case p.Limit > maxFizzBuzzLimit:
-		return &ParamError{FieldLimit, ErrMustNotExceedMaxValue}
+		return &ParamError{Field: FieldLimit, Err: ErrMustNotExceedMaxValue}
 	case p.Str1 == "":
-		return &ParamError{FieldStr1, ErrStringMustNotBeEmpty}
+		return &ParamError{Field: FieldStr1, Err: ErrStringMustNotBeEmpty}
 	case len(p.Str1) > maxFizzBuzzStringLength:
-		return &ParamError{FieldStr1, ErrStringMustNotExceedMaxLength}
+		return &ParamError{Field: FieldStr1, Err: ErrStringMustNotExceedMaxLength}
 	case p.Str2 == "":
-		return &ParamError{FieldStr2, ErrStringMustNotBeEmpty}
+		return &ParamError{Field: FieldStr2, Err: ErrStringMustNotBeEmpty}
 	case len(p.Str2) > maxFizzBuzzStringLength:
-		return &ParamError{FieldStr2, ErrStringMustNotExceedMaxLength}
+		return &ParamError{Field: FieldStr2, Err: ErrStringMustNotExceedMaxLength}
 	}
 
 	return nil
+}
+
+// ErrNotAnInteger is returned when a numeric query parameter cannot be parsed.
+var ErrNotAnInteger = errors.New(`must be an integer`)
+
+// QueryValues interface.
+type QueryValues interface {
+	Has(key string) bool
+	Get(key string) string
+}
+
+// ParseParams extract params from query string.
+func ParseParams(query QueryValues) (params Params, err error) {
+	params = DefaultParams()
+
+	if query.Has("int1") {
+		params.Int1, err = strconv.Atoi(query.Get("int1"))
+		if err != nil {
+			return params, &ParamError{Field: FieldInt1, Err: ErrNotAnInteger}
+		}
+	}
+
+	if query.Has("int2") {
+		params.Int2, err = strconv.Atoi(query.Get("int2"))
+		if err != nil {
+			return params, &ParamError{Field: FieldInt2, Err: ErrNotAnInteger}
+		}
+	}
+
+	if query.Has("limit") {
+		params.Limit, err = strconv.Atoi(query.Get("limit"))
+		if err != nil {
+			return params, &ParamError{Field: FieldLimit, Err: ErrNotAnInteger}
+		}
+	}
+
+	if query.Has("str1") {
+		params.Str1 = query.Get("str1")
+	}
+
+	if query.Has("str2") {
+		params.Str2 = query.Get("str2")
+	}
+
+	return params, nil
 }
 
 // Generate will build the fizzbuzz sequence based on the input parameters.

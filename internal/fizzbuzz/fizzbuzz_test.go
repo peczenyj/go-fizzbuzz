@@ -2,6 +2,7 @@ package fizzbuzz_test
 
 import (
 	"errors"
+	"net/url"
 	"slices"
 	"testing"
 
@@ -17,6 +18,103 @@ func TestDefaultParams(t *testing.T) {
 
 	if params != expected {
 		t.Fatalf("unexpected default params (got: %v, expected: %v)", params, expected)
+	}
+}
+
+func TestParseParams(t *testing.T) {
+	testcases := []struct {
+		label    string
+		query    string
+		expected fizzbuzz.Params
+		fieldErr fizzbuzz.Field
+		err      error
+	}{
+		{
+			label:    "should return default params if no query string is present",
+			query:    "",
+			expected: fizzbuzz.Params{3, 5, 100, "fizz", "buzz"},
+		},
+		{
+			label:    "should ignore non supported query strings",
+			query:    "lol=hehe",
+			expected: fizzbuzz.Params{3, 5, 100, "fizz", "buzz"},
+		},
+		{
+			label:    "should return default params with limit of 15",
+			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{3, 5, 15, "fizz", "buzz"},
+		},
+		{
+			label:    "should return default params with limit of 15 and alternate strings",
+			query:    "int1=3&int2=5&limit=15&str1=abc&str2=xyz",
+			expected: fizzbuzz.Params{3, 5, 15, "abc", "xyz"},
+		},
+		{
+			label:    "should return default params with limit of 1",
+			query:    "int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
+			expected: fizzbuzz.Params{3, 5, 1, "fizz", "buzz"},
+		},
+		{
+			label:    "should return error if int1 is not a number",
+			query:    "int1=lol&int2=5&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int1`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if int2 is not a number",
+			query:    "int1=3&int2=hehe&limit=15&str1=fizz&str2=buzz",
+			fieldErr: `int2`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return error if limit is not a number",
+			query:    "int1=3&int2=5&limit=ops&str1=fizz&str2=buzz",
+			fieldErr: `limit`,
+			err:      fizzbuzz.ErrNotAnInteger,
+		},
+		{
+			label:    "should return param with explicit empty str1",
+			query:    "int1=3&int2=5&limit=15&str1=&str2=buzz",
+			expected: fizzbuzz.Params{3, 5, 15, "", "buzz"},
+		},
+		{
+			label:    "should return param with explicit empty str2",
+			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=",
+			expected: fizzbuzz.Params{3, 5, 15, "fizz", ""},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.label, func(t *testing.T) {
+			t.Parallel()
+
+			values, err := url.ParseQuery(tc.query)
+			if err != nil {
+				t.Fatalf("unexpected error while parse query string: %v", err)
+			}
+
+			params, err := fizzbuzz.ParseParams(values)
+			if tc.err != nil {
+				if !errors.Is(err, tc.err) {
+					t.Fatalf("unexpected error (got: %v, expected: %v)", err, tc.err)
+				}
+
+				pe, ok := errors.AsType[*fizzbuzz.ParamError](err)
+				if !ok {
+					t.Fatalf("unexpected error type (got: %v, expected: *fizzbuzz.ParamError)", err)
+				}
+
+				if pe.Field != tc.fieldErr {
+					t.Fatalf("unexpected error field (got: %v, expected: %v)", pe.Field, tc.fieldErr)
+				}
+
+				return
+			}
+
+			if params != tc.expected {
+				t.Fatalf("unexpected params (got: %v, expected: %v)", params, tc.expected)
+			}
+		})
 	}
 }
 
