@@ -49,10 +49,17 @@ jobs:
         run: go vet ./...
 
       - name: Test (race + coverage)
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: go test -race -covermode=atomic -coverprofile=coverage.txt ./...
 
       - name: Coverage summary
-        run: go tool cover -func=coverage.out | tail
+        run: go tool cover -func=coverage.txt | tail
+
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v5
+        if: matrix.go-version == '1.27.x'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: peczenyj/go-fizzbuzz
 
   vulncheck:
     runs-on: ubuntu-latest

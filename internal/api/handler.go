@@ -46,7 +46,11 @@ func writeJSON(w http.ResponseWriter, statusCode int, result any) {
 
 	w.WriteHeader(statusCode)
 
-	err := json.NewEncoder(w).Encode(result)
+	encoder := json.NewEncoder(w)
+
+	encoder.SetEscapeHTML(true)
+
+	err := encoder.Encode(result)
 	if err != nil {
 		slog.Warn("unexpected error while perform json encode on result",
 			slog.Any("error", err))

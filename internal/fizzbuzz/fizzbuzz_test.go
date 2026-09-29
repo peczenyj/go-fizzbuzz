@@ -4,17 +4,58 @@ import (
 	"errors"
 	"net/url"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
+
+func TestConstants(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		constant string
+		value    string
+	}{
+		{
+			constant: fizzbuzz.FieldInt1,
+			value:    "int1",
+		},
+		{
+			constant: fizzbuzz.FieldInt2,
+			value:    "int2",
+		},
+		{
+			constant: fizzbuzz.FieldLimit,
+			value:    "limit",
+		},
+		{
+			constant: fizzbuzz.FieldStr1,
+			value:    "str1",
+		},
+		{
+			constant: fizzbuzz.FieldStr2,
+			value:    "str2",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run("check constant "+tc.constant, func(t *testing.T) {
+			t.Parallel()
+
+			if tc.constant != tc.value {
+				t.Fatalf("unexpected constant value (got: %v, expected: %v)", tc.constant, tc.value)
+			}
+		})
+	}
+}
 
 func TestDefaultParams(t *testing.T) {
 	t.Parallel()
 
 	params := fizzbuzz.DefaultParams()
 
-	expected := fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"}
+	expected := fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1: "fizz", Str2: "buzz"}
 
 	if params != expected {
 		t.Fatalf("unexpected default params (got: %v, expected: %v)", params, expected)
@@ -34,47 +75,47 @@ func TestParseParams(t *testing.T) {
 		{
 			label:    "should return default params if no query string is present",
 			query:    "",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should ignore non supported query strings",
 			query:    "lol=hehe",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return default params with limit of 15",
 			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "first value wins",
 			query:    "int1=2&int1=3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 2, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 2, Int2: 5, Limit: 15, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse explicit positive number (+ must be url encoded)",
 			query:    "int1=%2B3&int2=5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse negative number",
 			query:    "int1=3&int2=-5&limit=15&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: -5, Limit: 15, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: -5, Limit: 15, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should parse zero as integer",
 			query:    "int1=3&int2=5&limit=0&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 0, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 0, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return default params with limit of 15 and alternate strings",
 			query:    "int1=3&int2=5&limit=15&str1=abc&str2=xyz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"abc", Str2: "xyz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "abc", Str2: "xyz"},
 		},
 		{
 			label:    "should return default params with limit of 1",
 			query:    "int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 1, Str1:"fizz", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 1, Str1: "fizz", Str2: "buzz"},
 		},
 		{
 			label:    "should return error if int1 is not a number",
@@ -121,12 +162,12 @@ func TestParseParams(t *testing.T) {
 		{
 			label:    "should return param with explicit empty str1",
 			query:    "int1=3&int2=5&limit=15&str1=&str2=buzz",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"", Str2: "buzz"},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "", Str2: "buzz"},
 		},
 		{
 			label:    "should return param with explicit empty str2",
 			query:    "int1=3&int2=5&limit=15&str1=fizz&str2=",
-			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1:"fizz", Str2: ""},
+			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: ""},
 		},
 	}
 
@@ -168,6 +209,37 @@ func TestParseParams(t *testing.T) {
 	}
 }
 
+var _ fizzbuzz.QueryValues = mapSource(nil)
+
+type mapSource map[string]string
+
+func (m mapSource) Get(key string) string {
+	return m[key]
+}
+
+func (m mapSource) Has(key string) bool {
+	_, found := m[key]
+
+	return found
+}
+
+func TestParseParamsWithStub(t *testing.T) {
+	t.Parallel()
+
+	source := mapSource{"int1": "6"}
+
+	params, err := fizzbuzz.ParseParams(source)
+	if err != nil {
+		t.Fatalf("unexpected error while parse map source stub: %v", err)
+	}
+
+	expected := fizzbuzz.Params{Int1: 6, Int2: 5, Limit: 100, Str1: "fizz", Str2: "buzz"}
+
+	if params != expected {
+		t.Fatalf("unexpected params (got: %v, expected: %v)", params, expected)
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +249,8 @@ func TestGenerate(t *testing.T) {
 		targetErr error
 		fieldErr  fizzbuzz.Field
 		expected  []string
+
+		skipExpectedCheck bool
 	}{
 		{
 			label:  "should return first 100 elements of fizzbuzz with default parameter",
@@ -230,6 +304,13 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
+			label:  "should return first 15 elements of unicode sequence",
+			params: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "é", Str2: "🍕"},
+			expected: []string{
+				"1", "2", "é", "4", "🍕", "é", "7", "8", "é", "🍕", "11", "é", "13", "14", "é🍕",
+			},
+		},
+		{
 			label:  "should return first 15 elements of sequence without fizz or buzz",
 			params: fizzbuzz.Params{Int1: 30, Int2: 50, Limit: 15, Str1: "fizz", Str2: "fizz"},
 			expected: []string{
@@ -237,10 +318,17 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			label:  "should return first 10 elements of sequence with fizz+buzz",
+			label:  "should return first 10 elements of sequence with number and fizz+buzz",
 			params: fizzbuzz.Params{Int1: 2, Int2: 2, Limit: 10, Str1: "fizz", Str2: "buzz"},
 			expected: []string{
 				"1", "fizzbuzz", "3", "fizzbuzz", "5", "fizzbuzz", "7", "fizzbuzz", "9", "fizzbuzz",
+			},
+		},
+		{
+			label:  "should return first 10 elements of sequence with all fizz+buzz",
+			params: fizzbuzz.Params{Int1: 1, Int2: 1, Limit: 10, Str1: "fizz", Str2: "buzz"},
+			expected: []string{
+				"fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz", "fizzbuzz",
 			},
 		},
 		{
@@ -274,8 +362,23 @@ func TestGenerate(t *testing.T) {
 			fieldErr:  `str2`,
 		},
 		{
+			label:             "using max limit should not trigger an error",
+			params:            fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 1024, Str1: "x", Str2: "y"},
+			skipExpectedCheck: true,
+		},
+		{
+			label:             "using max size str1 should not trigger an error",
+			params:            fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 15, Str1: "1234567890123456789012345678901234567890123456789012345678901234", Str2: "y"},
+			skipExpectedCheck: true,
+		},
+		{
+			label:             "using max size str2 should not trigger an error",
+			params:            fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 15, Str1: "x", Str2: "1234567890123456789012345678901234567890123456789012345678901234"},
+			skipExpectedCheck: true,
+		},
+		{
 			label:     "should return error if param 'Limit' is invalid (bigger than 1024)",
-			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 1025, Str1: "", Str2: ""},
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 1025, Str1: "x", Str2: "y"},
 			targetErr: fizzbuzz.ErrMustNotExceedMaxValue,
 			fieldErr:  `limit`,
 		},
@@ -288,6 +391,12 @@ func TestGenerate(t *testing.T) {
 		{
 			label:     "should return error if param 'Str2' is invalid (bigger than 64 chars)",
 			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "x", Str2: "12345678901234567890123456789012345678901234567890123456789012345"},
+			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
+			fieldErr:  `str2`,
+		},
+		{
+			label:     "should return error if param 'Str2' is invalid (bigger than 64 chars using 17 emojis = 68 bytes)",
+			params:    fizzbuzz.Params{Int1: 1, Int2: 2, Limit: 3, Str1: "x", Str2: "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕"},
 			targetErr: fizzbuzz.ErrStringMustNotExceedMaxLength,
 			fieldErr:  `str2`,
 		},
@@ -323,9 +432,69 @@ func TestGenerate(t *testing.T) {
 				t.Fatalf("unexpected error from generate: %v", err)
 			}
 
+			if tc.skipExpectedCheck {
+				return
+			}
+
 			if !slices.Equal(result, tc.expected) {
 				t.Fatalf("unexpected result (got: %v, expect: %v)", result, tc.expected)
 			}
 		})
 	}
+}
+
+func FuzzGenerate(f *testing.F) {
+	f.Add(3, 5, 15, "fizz", "buzz")
+	f.Add(1, 1, 1, "a", "b")
+	f.Add(0, 5, 10, "x", "y")
+
+	f.Fuzz(func(t *testing.T, int1, int2, limit int, str1, str2 string) {
+		p := fizzbuzz.Params{Int1: int1, Int2: int2, Limit: limit, Str1: str1, Str2: str2}
+
+		out, err := fizzbuzz.Generate(p)
+		if err != nil {
+			if _, ok := errors.AsType[*fizzbuzz.ParamError](err); !ok {
+				t.Fatalf("error is not a *ParamError: %v", err)
+			}
+			return
+		}
+
+		if len(out) != limit {
+			t.Fatalf("len = %d, want %d", len(out), limit)
+		}
+		for i, got := range out {
+			n := i + 1
+			var want string
+			switch {
+			case n%int1 == 0 && n%int2 == 0:
+				want = str1 + str2
+			case n%int1 == 0:
+				want = str1
+			case n%int2 == 0:
+				want = str2
+			default:
+				want = strconv.Itoa(n)
+			}
+			if got != want {
+				t.Fatalf("out[%d] = %q, want %q", i, got, want)
+			}
+		}
+	})
+}
+
+func FuzzParseParams(f *testing.F) {
+	f.Add("int1=3&int2=5&limit=15&str1=fizz&str2=buzz")
+	f.Add("int1=abc")
+	f.Add("")
+
+	f.Fuzz(func(t *testing.T, raw string) {
+		values, err := url.ParseQuery(raw)
+		if err != nil {
+			t.Skip() // not a valid query string; not ParseParams' concern
+		}
+		_, err = fizzbuzz.ParseParams(values)
+		if err != nil && !errors.Is(err, fizzbuzz.ErrNotAnInteger) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }

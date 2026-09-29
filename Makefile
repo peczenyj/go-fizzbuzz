@@ -24,8 +24,13 @@ cover: ## Run tests with a coverage summary
 	$(GO) test -race -covermode=atomic -coverprofile=coverage.out ./...
 	$(GO) tool cover -func=coverage.out | tail -1
 
-fuzz: ## Fuzz Generate for FUZZTIME (default 30s)
-	$(GO) test ./internal/fizzbuzz -run='^$$' -fuzz=FuzzGenerate -fuzztime=$(FUZZTIME)
+FUZZ_TARGETS ?= FuzzGenerate FuzzParseParams
+
+fuzz: ## Fuzz each target for FUZZTIME (default 30s)
+	@for target in $(FUZZ_TARGETS); do \
+		echo "=== $$target"; \
+		$(GO) test ./internal/fizzbuzz -run='^$$' -fuzz="^$$target\$$" -fuzztime=$(FUZZTIME) || exit 1; \
+	done
 
 lint: ## go vet + golangci-lint
 	$(GO) vet ./...
