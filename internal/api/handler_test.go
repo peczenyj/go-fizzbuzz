@@ -101,6 +101,36 @@ func TestFizzBuzzHandler(t *testing.T) {
 			},
 		},
 		{
+			label:   "should return error with no parameters",
+			target:  "/fizzbuzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int1`, Reason: `required`},
+		},
+		{
+			label:   "should return error if int1 is missing",
+			target:  "/fizzbuzz?int2=5&limit=15&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int1`, Reason: `required`},
+		},
+		{
+			label:   "should return error if int2 is missing",
+			target:  "/fizzbuzz?int1=3&limit=15&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int2`, Reason: `required`},
+		},
+		{
+			label:   "should return error if limit is missing",
+			target:  "/fizzbuzz?int1=3&int2=5&str1=fizz&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `limit`, Reason: `required`},
+		},
+		{
+			label:   "should return error if str1 is missing",
+			target:  "/fizzbuzz?int1=3&int2=5&limit=15&str2=buzz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `str1`, Reason: `required`},
+		},
+		{
+			label:   "should return error if str2 is missing",
+			target:  "/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz",
+			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `str2`, Reason: `required`},
+		},
+		{
 			label:   "should return error if int1 is not a number",
 			target:  "/fizzbuzz?int1=lol&int2=5&limit=15&str1=fizz&str2=buzz",
 			errBody: &api.ErrorBody{Error: `invalid parameter`, Field: `int1`, Reason: `must be an integer`},
@@ -168,7 +198,7 @@ func TestFizzBuzzHandler(t *testing.T) {
 					t.Fatalf("unexpected http status code from endpoint /fizzbuzz (got: %v, expected: %v)", statusCode, http.StatusBadRequest)
 				}
 
-				if contentType := responseHeaders.Get(api.ContentTypeHeaderName); contentType != `application/json` {
+				if contentType := responseHeaders.Get(`Content-Type`); contentType != `application/json` {
 					t.Fatalf("unexpected content type (got: %v, expected %v)", contentType, `application/json`)
 				}
 
@@ -190,7 +220,7 @@ func TestFizzBuzzHandler(t *testing.T) {
 				t.Fatalf("unexpected http status code from endpoint /fizzbuzz (got: %v, expected: %v)", statusCode, http.StatusOK)
 			}
 
-			if contentType := responseHeaders.Get(api.ContentTypeHeaderName); contentType != `application/json` {
+			if contentType := responseHeaders.Get(`Content-Type`); contentType != `application/json` {
 				t.Fatalf("unexpected content type (got: %v, expected %v)", contentType, `application/json`)
 			}
 

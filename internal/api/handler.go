@@ -13,16 +13,17 @@ import (
 var _ fizzbuzz.QueryValues = url.Values{}
 
 const (
-	ContentTypeHeaderName      = `Content-Type`
-	ContentTypeApplicationJSON = `application/json`
+	contentTypeHeader = `Content-Type`
+	mediaTypeJSON     = `application/json`
 )
 
-// Healthz k8s api health endpoint.
+// Healthz reports liveness and readiness: it always returns 200 with an empty body.
 func Healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// FizzBuzz is the http fizzbuzz handler.
+// FizzBuzz serves GET /fizzbuzz: it parses the five query parameters and returns
+// the sequence as a JSON array of strings, or a 400 ErrorBody naming the invalid field.
 func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 	var params fizzbuzz.Params
 
@@ -46,7 +47,7 @@ func FizzBuzz(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, result any) {
-	w.Header().Set(ContentTypeHeaderName, ContentTypeApplicationJSON)
+	w.Header().Set(contentTypeHeader, mediaTypeJSON)
 
 	w.WriteHeader(statusCode)
 
@@ -61,7 +62,8 @@ func writeJSON(w http.ResponseWriter, statusCode int, result any) {
 	}
 }
 
-// ErrorBody error body envelope.
+// ErrorBody is the JSON body of every 4xx/5xx response; Field and Reason are
+// set only for invalid parameters (400).
 type ErrorBody struct {
 	Error  string `json:"error"`
 	Field  string `json:"field,omitempty"`

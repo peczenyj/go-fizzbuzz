@@ -98,7 +98,7 @@ jobs:
           done
           curl -fsS "localhost:8080/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz" | tee body.json
           grep -q '"fizzbuzz"' body.json
-          test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:8080/fizzbuzz?int1=0')" = "400"
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:8080/fizzbuzz?int1=0&int2=5&limit=15&str1=a&str2=b')" = "400"
 
       - name: Container logs
         if: always()

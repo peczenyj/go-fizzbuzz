@@ -1,10 +1,10 @@
 package fizzbuzz
 
 import (
-	"errors"
 	"strconv"
 )
 
+// Parameter names, as used in the query string and in ParamError.Field.
 const (
 	FieldInt1  = `int1`
 	FieldInt2  = `int2`
@@ -16,9 +16,8 @@ const (
 	defaultFizzBuzzMaxStringLength = 64
 )
 
-var ErrParamRequired = errors.New("parameter required")
-
-// Params represents the fizzbuzz generate function parameters.
+// Params holds the five inputs of a fizzbuzz request. It is a comparable value
+// type and can be used as a map key (e.g. for request statistics).
 type Params struct {
 	Int1  int
 	Int2  int
@@ -27,55 +26,55 @@ type Params struct {
 	Str2  string
 }
 
-// ErrNotAnInteger is returned when a numeric query parameter cannot be parsed.
-var ErrNotAnInteger = errors.New(`must be an integer`)
-
-// QueryValues interface.
+// QueryValues is the minimal read-only view Parse needs; url.Values satisfies it.
 type QueryValues interface {
 	Has(key string) bool
 	Get(key string) string
 }
 
-// Parse extract params from a query values interface, like url.Values from query string.
+// Parse fills p from query. All five parameters are required; int1, int2 and
+// limit must be integers. It returns a *ParamError wrapping ErrRequired or
+// ErrNotAnInteger; on error, p's contents are unspecified.
+// Parse does not check domain rules or size limits: Generator.Generate does.
 func (p *Params) Parse(query QueryValues) (err error) {
-	if query.Has(FieldInt1) {
-		p.Int1, err = strconv.Atoi(query.Get(FieldInt1))
-		if err != nil {
-			return &ParamError{Field: FieldInt1, Err: ErrNotAnInteger}
-		}
-	} else {
-		return &ParamError{Field: FieldInt1, Err: ErrParamRequired}
+	if !query.Has(FieldInt1) {
+		return &ParamError{Field: FieldInt1, Err: ErrRequired}
 	}
 
-	if query.Has(FieldInt2) {
-		p.Int2, err = strconv.Atoi(query.Get(FieldInt2))
-		if err != nil {
-			return &ParamError{Field: FieldInt2, Err: ErrNotAnInteger}
-		}
-	} else {
-		return &ParamError{Field: FieldInt2, Err: ErrParamRequired}
+	p.Int1, err = strconv.Atoi(query.Get(FieldInt1))
+	if err != nil {
+		return &ParamError{Field: FieldInt1, Err: ErrNotAnInteger}
 	}
 
-	if query.Has(FieldLimit) {
-		p.Limit, err = strconv.Atoi(query.Get(FieldLimit))
-		if err != nil {
-			return &ParamError{Field: FieldLimit, Err: ErrNotAnInteger}
-		}
-	} else {
-		return &ParamError{Field: FieldLimit, Err: ErrParamRequired}
+	if !query.Has(FieldInt2) {
+		return &ParamError{Field: FieldInt2, Err: ErrRequired}
 	}
 
-	if query.Has(FieldStr1) {
-		p.Str1 = query.Get(FieldStr1)
-	} else {
-		return &ParamError{Field: FieldStr1, Err: ErrParamRequired}
+	p.Int2, err = strconv.Atoi(query.Get(FieldInt2))
+	if err != nil {
+		return &ParamError{Field: FieldInt2, Err: ErrNotAnInteger}
 	}
 
-	if query.Has(FieldStr2) {
-		p.Str2 = query.Get(FieldStr2)
-	} else {
-		return &ParamError{Field: FieldStr2, Err: ErrParamRequired}
+	if !query.Has(FieldLimit) {
+		return &ParamError{Field: FieldLimit, Err: ErrRequired}
 	}
+
+	p.Limit, err = strconv.Atoi(query.Get(FieldLimit))
+	if err != nil {
+		return &ParamError{Field: FieldLimit, Err: ErrNotAnInteger}
+	}
+
+	if !query.Has(FieldStr1) {
+		return &ParamError{Field: FieldStr1, Err: ErrRequired}
+	}
+
+	p.Str1 = query.Get(FieldStr1)
+
+	if !query.Has(FieldStr2) {
+		return &ParamError{Field: FieldStr2, Err: ErrRequired}
+	}
+
+	p.Str2 = query.Get(FieldStr2)
 
 	return nil
 }

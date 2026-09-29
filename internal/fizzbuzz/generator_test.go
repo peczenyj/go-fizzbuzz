@@ -10,6 +10,109 @@ import (
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
 )
 
+func TestNewGenerator(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		label           string
+		maxLimit        int
+		maxStringLength int
+		errMsg          string
+		verify          func(*testing.T, *fizzbuzz.Generator)
+	}{
+		{
+			label:           "should return a small generator",
+			maxLimit:        1,
+			maxStringLength: 1,
+			verify: func(t *testing.T, g *fizzbuzz.Generator) {
+				sequence, err := g.Generate(fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 1, Str1: "f", Str2: "b"})
+				if err != nil {
+					t.Fatalf("unexpected error %v", err)
+				}
+
+				expected := []string{"1"}
+				if !slices.Equal(sequence, expected) {
+					t.Fatalf("unexpected sequence (got: %v, expected: %v)", sequence, expected)
+				}
+
+				_, err = g.Generate(fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 2, Str1: "f", Str2: "b"})
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+
+				if !errors.Is(err, fizzbuzz.ExceededMaxValueError(1)) {
+					t.Fatalf("unexpected error %v", err)
+				}
+
+				_, err = g.Generate(fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 1, Str1: "fx", Str2: "b"})
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+
+				if !errors.Is(err, fizzbuzz.ExceededMaxLengthError(1)) {
+					t.Fatalf("unexpected error %v", err)
+				}
+			},
+		},
+		{
+			label:           "should not accept big max limit",
+			maxLimit:        100_001,
+			maxStringLength: 255,
+			errMsg:          `invalid max limit 100001: too big`,
+		},
+		{
+			label:           "should not accept big max string length",
+			maxLimit:        100_000,
+			maxStringLength: 256,
+			errMsg:          `invalid max string length 256: too big`,
+		},
+		{
+			label:           "should accept limits at the ceiling",
+			maxLimit:        100_000,
+			maxStringLength: 255,
+		},
+		{
+			label:           "should not accept low max limit",
+			maxLimit:        0,
+			maxStringLength: 255,
+			errMsg:          `invalid max limit 0: too low`,
+		},
+		{
+			label:           "should not accept low max string length",
+			maxLimit:        100_000,
+			maxStringLength: 0,
+			errMsg:          `invalid max string length 0: too low`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.label, func(t *testing.T) {
+			t.Parallel()
+
+			generator, err := fizzbuzz.NewGenerator(tc.maxLimit, tc.maxStringLength)
+			if tc.errMsg != "" {
+				if err == nil {
+					t.Fatalf("unexpected error (got: nil, expected: %v)", tc.errMsg)
+				}
+
+				if err.Error() != tc.errMsg {
+					t.Fatalf("unexpected error message (got: %v, expected: %v)", err.Error(), tc.errMsg)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error %v", err)
+			}
+
+			if tc.verify != nil {
+				tc.verify(t, generator)
+			}
+		})
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 

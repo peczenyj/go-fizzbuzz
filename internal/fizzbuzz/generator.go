@@ -1,18 +1,20 @@
 package fizzbuzz
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 )
 
-// Generator type.
+// Generator produces fizzbuzz sequences within a size policy fixed at
+// construction: a maximum limit and a maximum label length. A Generator is
+// immutable and safe for concurrent use.
 type Generator struct {
 	maxLimit        int
 	maxStringLength int
 }
 
-// DefaultGenerator: ~1024 elements of ~128 bytes each per response.
+// DefaultGenerator returns a Generator allowing up to 1024 elements and
+// 64-byte labels, i.e. responses of roughly 1024 × 128 bytes at most.
 func DefaultGenerator() *Generator {
 	return &Generator{
 		maxLimit:        defaultFizzBuzzMaxLimit,
@@ -20,24 +22,41 @@ func DefaultGenerator() *Generator {
 	}
 }
 
-// NewGenerator ctor.
+// Hard ceilings for any Generator. Worst case per call:
+// maxLimitThreshold × 2 × maxStringLengthThreshold ≈ 100 000 × 510 B ≈ 51 MB.
+const (
+	maxLimitThreshold        = 100_000
+	maxStringLengthThreshold = 255
+)
+
+// NewGenerator returns a Generator allowing up to maxLimit elements and labels
+// of up to maxStringLength bytes. Both must be between 1 and the hard ceilings
+// (100 000 and 255); otherwise the error wraps ErrTooLow or ErrTooBig.
 func NewGenerator(maxLimit, maxStringLength int) (*Generator, error) {
-	if maxLimit > 100_000 || maxStringLength > 256 {
-		return nil, errors.New("limits too big")
+	if maxLimit > maxLimitThreshold {
+		return nil, fmt.Errorf("invalid max limit %d: %w", maxLimit, ErrTooBig)
+	}
+
+	if maxLimit <= 0 {
+		return nil, fmt.Errorf("invalid max limit %d: %w", maxLimit, ErrTooLow)
+	}
+
+	if maxStringLength > maxStringLengthThreshold {
+		return nil, fmt.Errorf("invalid max string length %d: %w", maxStringLength, ErrTooBig)
+	}
+
+	if maxStringLength <= 0 {
+		return nil, fmt.Errorf("invalid max string length %d: %w", maxStringLength, ErrTooLow)
 	}
 
 	return &Generator{maxLimit: maxLimit, maxStringLength: maxStringLength}, nil
 }
 
-var (
-	// ErrMustBeBiggerThanZero public error.
-	ErrMustBeBiggerThanZero = errors.New("must be bigger than zero")
-	// ErrStringMustNotBeEmpty public error.
-	ErrStringMustNotBeEmpty = errors.New("must not be empty string")
-)
-
-// Generate will build the fizzbuzz sequence based on the input parameters.
-// It will return an error if the parameters are invalid.
+// Generate returns the fizzbuzz sequence for p: numbers from 1 to p.Limit,
+// with multiples of p.Int1 replaced by p.Str1, multiples of p.Int2 by p.Str2,
+// and multiples of both by p.Str1+p.Str2.
+// It first checks p against the domain rules, then against g's size policy;
+// any violation is a *ParamError.
 func (g *Generator) Generate(p Params) ([]string, error) {
 	if err := g.validateParameters(&p); err != nil {
 		return nil, fmt.Errorf("unable to generate fizzbuzz sequence: %w", err)

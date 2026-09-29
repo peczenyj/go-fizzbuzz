@@ -59,7 +59,37 @@ func TestParseParams(t *testing.T) {
 		err      error
 	}{
 		{
-			label:    "should return default params if no query string is present",
+			label:    "should return error if int1 is omitted",
+			query:    "",
+			fieldErr: fizzbuzz.FieldInt1,
+			err:      fizzbuzz.ErrRequired,
+		},
+		{
+			label:    "should return error if int2 is omitted",
+			query:    "int1=3",
+			fieldErr: fizzbuzz.FieldInt2,
+			err:      fizzbuzz.ErrRequired,
+		},
+		{
+			label:    "should return error if limit is omitted",
+			query:    "int1=3&int2=5",
+			fieldErr: fizzbuzz.FieldLimit,
+			err:      fizzbuzz.ErrRequired,
+		},
+		{
+			label:    "should return error if str1 is omitted",
+			query:    "int1=3&int2=5&limit=100",
+			fieldErr: fizzbuzz.FieldStr1,
+			err:      fizzbuzz.ErrRequired,
+		},
+		{
+			label:    "should return error if str2 is omitted",
+			query:    "int1=3&int2=5&limit=100&str1=fizz",
+			fieldErr: fizzbuzz.FieldStr2,
+			err:      fizzbuzz.ErrRequired,
+		},
+		{
+			label:    "should parse query with success",
 			query:    "int1=3&int2=5&limit=100&str1=fizz&str2=buzz",
 			expected: fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 100, Str1: "fizz", Str2: "buzz"},
 		},

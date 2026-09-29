@@ -38,7 +38,7 @@ go run ./cmd/server/main.go
 We can use curl to perform a quick http request:
 
 ```console
-$ curl -s "http://127.0.0.1:8080/fizzbuzz"
+$ curl -s "http://127.0.0.1:8080/fizzbuzz?int1=3&int2=5&limit=100&str1=fizz&str2=buzz"
 ["1","2","fizz","4","buzz","fizz","7","8","fizz","buzz","11","fizz","13","14","fizzbuzz","16","17","fizz","19","buzz","fizz","22","23","fizz","buzz","26","fizz","28","29","fizzbuzz","31","32","fizz","34","buzz","fizz","37","38","fizz","buzz","41","fizz","43","44","fizzbuzz","46","47","fizz","49","buzz","fizz","52","53","fizz","buzz","56","fizz","58","59","fizzbuzz","61","62","fizz","64","buzz","fizz","67","68","fizz","buzz","71","fizz","73","74","fizzbuzz","76","77","fizz","79","buzz","fizz","82","83","fizz","buzz","86","fizz","88","89","fizzbuzz","91","92","fizz","94","buzz","fizz","97","98","fizz","buzz"]
 ```
 
@@ -52,7 +52,7 @@ $ docker build .
 
 ### the /fizzbuzz endpoint
 
-This endpoint responds to HTTP verb GET only, it expect up to 5 parameters ( `int1`, `int2`, `limit`, `str1`, `str2` ) and will return a json response with the fizzbuzz sequence if the parameters are considered valid.
+This endpoint responds to HTTP verb GET only, it expect 5 parameters ( `int1`, `int2`, `limit`, `str1`, `str2` ) and will return a json response with the fizzbuzz sequence if the parameters are considered valid.
 
 ### the /healthz endpoint
 
@@ -70,7 +70,7 @@ In order to be easier to maintain by other developers and be ready to production
 - The golang standard library should be enough to implement the core features.
 - No premature optimizations. Correctness and bounded resources first.
 - Output will be a JSON array of strings: this format helps to escape the input strings and avoid any ambiguity.
-- Omitted parameters take the fizzbuzz classic defaults. Invalid values will be rejected.
+- Omitted or invalid values will be rejected.
 - Inputs are bounded to certain limits in order to keep the response size under control and avoid a denial of service risk.
 
 ## Limitations

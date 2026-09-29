@@ -35,9 +35,6 @@ linters:
       - linters:
           - errcheck
         text: 'fmt\.Fprint'
-      - linters:
-          - revive
-        text: 'exported'
 
 formatters:
   enable:
