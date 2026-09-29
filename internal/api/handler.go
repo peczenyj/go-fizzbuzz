@@ -24,14 +24,18 @@ func Healthz(w http.ResponseWriter, _ *http.Request) {
 
 // FizzBuzz is the http fizzbuzz handler.
 func FizzBuzz(w http.ResponseWriter, r *http.Request) {
-	params, err := fizzbuzz.ParseParams(r.URL.Query())
+	var params fizzbuzz.Params
+
+	err := params.Parse(r.URL.Query())
 	if err != nil {
 		writeError(w, err)
 
 		return
 	}
 
-	result, err := fizzbuzz.Generate(params)
+	generator := fizzbuzz.DefaultGenerator()
+
+	result, err := generator.Generate(params)
 	if err != nil {
 		writeError(w, err)
 
