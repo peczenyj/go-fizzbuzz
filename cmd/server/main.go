@@ -20,7 +20,14 @@ const (
 	defaultListenerAddress   = `:8080`
 )
 
+var (
+	version  = "dev"
+	revision = "unknown"
+)
+
 func main() {
+	slog.Info("application start", slog.String("version", version), slog.String("revision", revision))
+
 	os.Exit(MainWithExitCode(context.Background()))
 }
 
@@ -31,7 +38,7 @@ func MainWithExitCode(ctx context.Context) int {
 	defer cancel()
 
 	if err := RunServer(ctx); err != nil {
-		slog.Warn("server finish with error", slog.Any("error", err))
+		slog.Error("server finish with error", slog.Any("error", err))
 
 		return 1
 	}
@@ -41,8 +48,6 @@ func MainWithExitCode(ctx context.Context) int {
 
 // RunServer start an http server and register the api handler.
 func RunServer(ctx context.Context) error {
-	slog.Info("starting server, will listen to :8080")
-
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", api.Healthz)
@@ -57,6 +62,8 @@ func RunServer(ctx context.Context) error {
 	done := make(chan error)
 
 	go prepareServerShutdown(ctx, server, done)
+
+	slog.Info("starting server, will listen and serve", slog.String("addr", server.Addr))
 
 	// this will return immediately during graceful shutdown!
 	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
