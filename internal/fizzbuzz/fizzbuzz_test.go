@@ -111,6 +111,10 @@ func TestParseParams(t *testing.T) {
 				return
 			}
 
+			if err != nil {
+				t.Fatalf("unexpected error (got: %v, expected: nil)", err)
+			}
+
 			if params != tc.expected {
 				t.Fatalf("unexpected params (got: %v, expected: %v)", params, tc.expected)
 			}

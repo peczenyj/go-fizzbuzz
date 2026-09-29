@@ -7,6 +7,12 @@ import (
 )
 
 const (
+	FieldInt1  = `int1`
+	FieldInt2  = `int2`
+	FieldLimit = `limit`
+	FieldStr1  = `str1`
+	FieldStr2  = `str2`
+
 	defaultFizzLabel        = "fizz"
 	defaultBuzzLabel        = "buzz"
 	defaultFizzDivisor      = 3
@@ -80,37 +86,37 @@ type QueryValues interface {
 	Get(key string) string
 }
 
-// ParseParams extract params from query string.
+// ParseParams extract params from a query values interface, like url.Values from query string.
 func ParseParams(query QueryValues) (params Params, err error) {
 	params = DefaultParams()
 
-	if query.Has("int1") {
-		params.Int1, err = strconv.Atoi(query.Get("int1"))
+	if query.Has(FieldInt1) {
+		params.Int1, err = strconv.Atoi(query.Get(FieldInt1))
 		if err != nil {
 			return params, &ParamError{Field: FieldInt1, Err: ErrNotAnInteger}
 		}
 	}
 
-	if query.Has("int2") {
-		params.Int2, err = strconv.Atoi(query.Get("int2"))
+	if query.Has(FieldInt2) {
+		params.Int2, err = strconv.Atoi(query.Get(FieldInt2))
 		if err != nil {
 			return params, &ParamError{Field: FieldInt2, Err: ErrNotAnInteger}
 		}
 	}
 
-	if query.Has("limit") {
-		params.Limit, err = strconv.Atoi(query.Get("limit"))
+	if query.Has(FieldLimit) {
+		params.Limit, err = strconv.Atoi(query.Get(FieldLimit))
 		if err != nil {
 			return params, &ParamError{Field: FieldLimit, Err: ErrNotAnInteger}
 		}
 	}
 
-	if query.Has("str1") {
-		params.Str1 = query.Get("str1")
+	if query.Has(FieldStr1) {
+		params.Str1 = query.Get(FieldStr1)
 	}
 
-	if query.Has("str2") {
-		params.Str2 = query.Get("str2")
+	if query.Has(FieldStr2) {
+		params.Str2 = query.Get(FieldStr2)
 	}
 
 	return params, nil
