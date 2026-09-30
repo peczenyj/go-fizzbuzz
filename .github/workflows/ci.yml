@@ -96,6 +96,8 @@ jobs:
 
       - name: Smoke test
         run: |
+          docker run --rm go-fizzbuzz:ci -version | tee version.txt
+          grep -q '^go-fizzbuzz ' version.txt
           docker run -d --name fizzbuzz -p 8080:8080 go-fizzbuzz:ci
           for i in $(seq 1 20); do
             curl -fsS localhost:8080/healthz && break

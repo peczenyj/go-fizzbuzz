@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Configuration with flags and `FIZZBUZZ_*` environment variables: listen
+  address, log level and format (text or JSON), `limit` and string maximums,
+  shutdown timeout. Invalid values stop the server at startup with exit code 2.
+- `-version` prints the version and revision, and exits.
+
 ## [0.2.0] - 2026-09-30
 
 ### Added

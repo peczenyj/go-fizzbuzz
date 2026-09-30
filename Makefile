@@ -14,8 +14,8 @@ help: ## Show available targets
 build: ## Build the server binary into bin/
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/server
 
-run: ## Run the server locally
-	$(GO) run ./cmd/server
+run: ## Run the server locally (flags via ARGS, e.g. ARGS=-log-level=debug)
+	$(GO) run ./cmd/server $(ARGS)
 
 test: ## Run all tests with the race detector
 	$(GO) test -race -count=1 ./...
