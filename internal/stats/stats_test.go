@@ -7,44 +7,62 @@ import (
 	"github.com/peczenyj/go-fizzbuzz/internal/stats"
 )
 
-func TestCounter_empty(t *testing.T) {
+func TestCounter(t *testing.T) {
 	t.Parallel()
 
-	c := stats.NewCounter[string]()
+	testcases := []struct {
+		label        string
+		records      []string
+		expectedKey  string
+		expectedHits int
+		expectedOk   bool
+	}{
+		{
+			label: "should report nothing without records",
+		},
+		{
+			label:        "should report a single hit",
+			records:      []string{"x"},
+			expectedKey:  "x",
+			expectedHits: 1,
+			expectedOk:   true,
+		},
+		{
+			label:        "should report the most frequent key",
+			records:      []string{"x", "y", "y", "x", "x"},
+			expectedKey:  "x",
+			expectedHits: 3,
+			expectedOk:   true,
+		},
+		{
+			label:        "should keep the first key to reach a tied count",
+			records:      []string{"x", "y", "y", "x", "x", "y"},
+			expectedKey:  "x",
+			expectedHits: 3,
+			expectedOk:   true,
+		},
+		{
+			label:        "should change the top when another key overtakes it",
+			records:      []string{"x", "y", "y", "x", "x", "y", "y"},
+			expectedKey:  "y",
+			expectedHits: 4,
+			expectedOk:   true,
+		},
+	}
 
-	assertStatsTop(t, c, "", 0, false)
-}
+	for _, tc := range testcases {
+		t.Run(tc.label, func(t *testing.T) {
+			t.Parallel()
 
-func TestCounter_single_hit(t *testing.T) {
-	t.Parallel()
+			c := stats.NewCounter[string]()
 
-	c := stats.NewCounter[string]()
+			for _, k := range tc.records {
+				c.Record(k)
+			}
 
-	c.Record("x")
-
-	assertStatsTop(t, c, "x", 1, true)
-}
-
-func TestCounter_multiple_hits(t *testing.T) {
-	t.Parallel()
-
-	c := stats.NewCounter[string]()
-
-	c.Record("x")
-	c.Record("y")
-	c.Record("y")
-	c.Record("x")
-	c.Record("x")
-
-	assertStatsTop(t, c, "x", 3, true)
-
-	c.Record("y")
-
-	assertStatsTop(t, c, "x", 3, true)
-
-	c.Record("y")
-
-	assertStatsTop(t, c, "y", 4, true)
+			assertStatsTop(t, c, tc.expectedKey, tc.expectedHits, tc.expectedOk)
+		})
+	}
 }
 
 func assertStatsTop[K comparable](t *testing.T,
@@ -77,18 +95,23 @@ func TestCounter_concurrent(t *testing.T) {
 
 	c := stats.NewCounter[string]()
 
+	// Each iteration records a once, b twice and c three times, so the top
+	// changes while goroutines race (a, then b, then c), and c must end on top
+	// with exactly three times the iterations.
 	var wg sync.WaitGroup
 	for range goroutines {
 		wg.Go(func() {
 			for range perGoroutine {
-				c.Record("x")
+				c.Record("a")
+				c.Record("b")
+				c.Record("b")
+				c.Record("c")
+				c.Record("c")
+				c.Record("c")
 			}
 		})
 	}
 	wg.Wait()
 
-	key, hits, ok := c.Top()
-	if !ok || key != "x" || hits != goroutines*perGoroutine {
-		t.Fatalf("got (%q, %d, %v), want (%q, %d, true)", key, hits, ok, "x", goroutines*perGoroutine)
-	}
+	assertStatsTop(t, c, "c", 3*goroutines*perGoroutine, true)
 }

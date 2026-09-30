@@ -120,7 +120,10 @@ func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
 
 	var body StatisticsBody
 	if p, hits, ok := a.statistics.Top(); ok {
-		body.Params = &ParamsBody{Int1: p.Int1, Int2: p.Int2, Limit: p.Limit, Str1: p.Str1, Str2: p.Str2}
+		// A conversion, not a field copy: it stops compiling if the two
+		// structs drift apart.
+		pb := ParamsBody(p)
+		body.Params = &pb
 		body.Hits = hits
 	}
 

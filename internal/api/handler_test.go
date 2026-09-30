@@ -160,7 +160,7 @@ func TestFizzBuzzHandler(t *testing.T) {
 		buildGenerator  func(t *testing.T) api.Generator
 		buildStatistics func(t *testing.T) api.Statistics
 
-		errStatusCode int
+		errStatusCode int            // expected status; 200 when zero
 		errBody       *api.ErrorBody // set for error cases
 		expected      []string       // compared only when not nil
 
@@ -394,7 +394,7 @@ func TestFizzBuzzHandler(t *testing.T) {
 			statusCode, responseBody, responseHeaders := doRequest(t, handler, http.MethodGet, tc.target)
 
 			expectedStatusCode := http.StatusOK
-			if tc.errBody != nil {
+			if tc.errStatusCode != 0 {
 				expectedStatusCode = tc.errStatusCode
 			}
 
@@ -435,7 +435,7 @@ func TestStatisticsHandler(t *testing.T) {
 		target     string
 		statistics api.Statistics
 
-		errStatusCode int
+		errStatusCode int            // expected status; 200 when zero
 		errBody       *api.ErrorBody // set for error cases
 		verifyBody    func(*testing.T, []byte)
 	}{
@@ -497,7 +497,7 @@ func TestStatisticsHandler(t *testing.T) {
 			statusCode, responseBody, responseHeaders := doRequest(t, handler, http.MethodGet, tc.target)
 
 			expectedStatusCode := http.StatusOK
-			if tc.errBody != nil {
+			if tc.errStatusCode != 0 {
 				expectedStatusCode = tc.errStatusCode
 			}
 

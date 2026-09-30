@@ -22,8 +22,10 @@ func (c *Counter[K]) Record(k K) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.counts[k]++
-	if n := c.counts[k]; n > c.topHits {
+	n := c.counts[k] + 1
+	c.counts[k] = n
+
+	if n > c.topHits {
 		c.top, c.topHits = k, n
 	}
 }
