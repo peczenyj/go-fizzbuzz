@@ -19,8 +19,8 @@ type Generator struct {
 // is about 790 KB (measured: 789 506 bytes).
 func DefaultGenerator() *Generator {
 	return &Generator{
-		maxLimit:        defaultFizzBuzzMaxLimit,
-		maxStringLength: defaultFizzBuzzMaxStringLength,
+		maxLimit:        DefaultMaxLimit,
+		maxStringLength: DefaultMaxStringLength,
 	}
 }
 

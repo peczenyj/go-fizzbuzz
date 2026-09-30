@@ -9,6 +9,7 @@ $ curl -s "localhost:8080/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz"
 
 - [Objective](#objective)
 - [Quick start](#quick-start)
+- [Configuration](#configuration)
 - [API](#api)
 - [Design decisions](#design-decisions)
 - [Project layout](#project-layout)
@@ -49,7 +50,8 @@ Requirements: Go 1.26 or later, or Docker.
 ```console
 $ make run
 go run ./cmd/server
-... INFO starting server, will listen and serve addr=:8080
+... level=INFO msg="application start" version=dev ...
+... level=INFO msg="starting server, will listen and serve" addr=:8080
 ```
 
 With Docker:
@@ -61,7 +63,51 @@ $ docker run --rm -p 8080:8080 go-fizzbuzz
 
 `make docker` builds the same image, tagged with `git describe` and carrying version labels.
 
-The server listens on `:8080` and stops gracefully on `SIGINT` or `SIGTERM`.
+The server listens on `:8080` by default and stops gracefully on `SIGINT` or `SIGTERM`.
+
+## Configuration
+
+Every setting is a command-line flag whose default comes from an environment variable, so the precedence is **flag > environment variable > built-in default**. Flags suit local use; environment variables suit containers and Kubernetes, without changing the image's entry point.
+
+| Flag | Environment variable | Default | Accepted values |
+|---|---|---|---|
+| `-addr` | `FIZZBUZZ_ADDR` | `:8080` | `host:port` |
+| `-log-level` | `FIZZBUZZ_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `-log-format` | `FIZZBUZZ_LOG_FORMAT` | `text` | `text`, `json` |
+| `-max-limit` | `FIZZBUZZ_MAX_LIMIT` | `1024` | 1 to 100,000 |
+| `-max-str-length` | `FIZZBUZZ_MAX_STR_LENGTH` | `64` | 1 to 255 bytes |
+| `-shutdown-timeout` | `FIZZBUZZ_SHUTDOWN_TIMEOUT` | `10s` | a positive Go duration |
+| `-version` | | | prints the version and exits |
+
+```console
+$ go run ./cmd/server -log-level=debug -max-limit=100
+$ docker run --rm -p 8080:8080 -e FIZZBUZZ_LOG_FORMAT=json ghcr.io/peczenyj/go-fizzbuzz:latest
+$ docker run --rm ghcr.io/peczenyj/go-fizzbuzz:latest -version
+go-fizzbuzz v0.3.0 (revision …)
+```
+
+- **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Every invalid environment variable is reported at once.
+- **The limits are validated by `fizzbuzz.NewGenerator`**, which owns the hard ceilings, so the configuration doesn't duplicate the domain rules.
+- `-h` lists every flag with its environment variable and default:
+
+```console
+$ go run ./cmd/server -h
+Usage of fizzbuzz:
+  -addr string
+        listen address (env FIZZBUZZ_ADDR) (default ":8080")
+  -log-format string
+        log format: text or json (env FIZZBUZZ_LOG_FORMAT) (default "text")
+  -log-level value
+        minimum log level: debug, info, warn or error (env FIZZBUZZ_LOG_LEVEL) (default INFO)
+  -max-limit int
+        largest accepted limit, up to 100000 (env FIZZBUZZ_MAX_LIMIT) (default 1024)
+  -max-str-length int
+        largest accepted str1/str2 in bytes, up to 255 (env FIZZBUZZ_MAX_STR_LENGTH) (default 64)
+  -shutdown-timeout duration
+        grace period for in-flight requests on shutdown (env FIZZBUZZ_SHUTDOWN_TIMEOUT) (default 10s)
+  -version
+        print the version and exit
+```
 
 ## API
 
@@ -134,6 +180,7 @@ The endpoint accepts no parameter: any query string returns `400` with `{"error"
 To keep the server production-ready and easy to maintain, I made the following choices:
 
 - **Standard library only.** `net/http` routing (method patterns, Go 1.22+), `encoding/json` and `log/slog` cover everything the brief needs. There are no runtime dependencies to audit or upgrade.
+- **Configuration with the standard `flag` package.** Environment variables provide the flag defaults, which gives the flag > env > default precedence without a configuration library. `config.Parse` takes the arguments and a `getenv` function, so tests don't touch the process environment.
 - **No premature optimization.** Correctness and bounded resources come first.
 - **JSON array output.** Quoting separates values without ambiguity: `str1=a,b` can't be read as two elements. HTML-sensitive characters are escaped.
 - **Strict input.** Every parameter is required. Values that are missing, not integers, or out of range are rejected with a `400` that names the field. There are no silent defaults.
@@ -156,6 +203,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 
 ```text
 cmd/server/          entry point: HTTP server, signals, graceful shutdown
+internal/config/     flags and FIZZBUZZ_* environment variables
 internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
 internal/api/        HTTP layer: routes, handlers, JSON responses
 internal/stats/      generic concurrency-safe counter with O(1) top
@@ -169,7 +217,7 @@ scripts/loadtest.sh  load test with hey (see Performance)
 $ make help
   help     Show available targets
   build    Build the server binary into bin/
-  run      Run the server locally
+  run      Run the server locally (flags via ARGS, e.g. ARGS=-log-level=debug)
   test     Run all tests with the race detector
   cover    Run tests with a coverage summary
   fuzz     Fuzz each target for FUZZTIME (default 30s)
@@ -247,7 +295,7 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 - **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests grows the map for as long as the process runs. To bound it, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries) that finds the most frequent items in fixed memory.
 - **One lock for all requests.** Every successful request takes the counter's mutex. The benchmark shows about 11 million records per second under 8-way contention, far above the request rate, so this is fine at this scale; if profiling ever shows contention, shard the counter.
 - **Statistics can't be disabled.** Next: a `-statistics=false` flag that removes the `/statistics` route and stops recording, rather than serving an empty result.
-- **Configuration.** The listen address and limits are constants today. Next: environment variables for the address, log level and format, and the `limit`/string maximums, validated at startup.
+- **No configuration file.** Flags and environment variables cover the current settings. A file (YAML or TOML) would only be worth it with many more settings, or with settings that change without a restart.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
 - **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
 - **Rate limiting.** I left it out of the service on purpose; I'd expect it at the ingress or API gateway.

@@ -11,9 +11,12 @@ const (
 	FieldLimit = `limit`
 	FieldStr1  = `str1`
 	FieldStr2  = `str2`
+)
 
-	defaultFizzBuzzMaxLimit        = 1024
-	defaultFizzBuzzMaxStringLength = 64
+// Limits used by DefaultGenerator.
+const (
+	DefaultMaxLimit        = 1024 // largest accepted limit
+	DefaultMaxStringLength = 64   // largest accepted str1/str2, in bytes
 )
 
 // Params holds the five inputs of a fizzbuzz request. It is a comparable value
