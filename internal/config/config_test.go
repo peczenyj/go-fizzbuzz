@@ -89,6 +89,12 @@ func TestParse(t *testing.T) {
 			args:     []string{"-version", "-log-format=xml"},
 			expected: func(c *config.Config) { c.ShowVersion = true; c.LogFormat = "xml" },
 		},
+		{
+			label:    "should ignore an invalid environment with -version",
+			args:     []string{"-version"},
+			env:      map[string]string{config.EnvMaxLimit: "many", config.EnvLogFormat: "xml"},
+			expected: func(c *config.Config) { c.ShowVersion = true },
+		},
 	}
 
 	for _, tc := range testcases {
@@ -126,6 +132,7 @@ func TestParse_invalid(t *testing.T) {
 		output string // expected in the reported error
 	}{
 		{label: "unknown flag", args: []string{"-port=80"}, output: "flag provided but not defined: -port"},
+		{label: "unknown flag with -version", args: []string{"-version", "-port=80"}, output: "flag provided but not defined: -port"},
 		{label: "positional argument", args: []string{"serve"}, output: `unexpected arguments ["serve"]`},
 		{label: "invalid log level flag", args: []string{"-log-level=verbose"}, output: `invalid value "verbose" for flag -log-level`},
 		{label: "invalid log format flag", args: []string{"-log-format=xml"}, output: `log format "xml"`},
@@ -134,7 +141,9 @@ func TestParse_invalid(t *testing.T) {
 		{label: "zero shutdown timeout", args: []string{"-shutdown-timeout=0s"}, output: "shutdown timeout 0s: must be positive"},
 		{label: "address without port", args: []string{"-addr=localhost"}, output: `addr "localhost"`},
 		{label: "invalid log level env", env: map[string]string{config.EnvLogLevel: "verbose"}, output: `FIZZBUZZ_LOG_LEVEL="verbose"`},
-		{label: "invalid log format env", env: map[string]string{config.EnvLogFormat: "xml"}, output: `log format "xml"`},
+		{label: "invalid log format env", env: map[string]string{config.EnvLogFormat: "xml"}, output: `FIZZBUZZ_LOG_FORMAT="xml": must be "text" or "json"`},
+		{label: "address without port env", env: map[string]string{config.EnvAddr: "localhost"}, output: `FIZZBUZZ_ADDR="localhost"`},
+		{label: "zero shutdown timeout env", env: map[string]string{config.EnvShutdownTimeout: "0s"}, output: `FIZZBUZZ_SHUTDOWN_TIMEOUT="0s": must be positive`},
 		{label: "invalid integer env", env: map[string]string{config.EnvMaxLimit: "many"}, output: `FIZZBUZZ_MAX_LIMIT="many"`},
 		{label: "invalid duration env", env: map[string]string{config.EnvShutdownTimeout: "soon"}, output: `FIZZBUZZ_SHUTDOWN_TIMEOUT="soon"`},
 		{
@@ -142,6 +151,12 @@ func TestParse_invalid(t *testing.T) {
 			args:   []string{"-max-limit=10"},
 			env:    map[string]string{config.EnvMaxLimit: "many"},
 			output: `FIZZBUZZ_MAX_LIMIT="many"`,
+		},
+		{
+			label:  "invalid env value is not hidden by a valid flag",
+			args:   []string{"-log-format=json"},
+			env:    map[string]string{config.EnvLogFormat: "xml"},
+			output: `FIZZBUZZ_LOG_FORMAT="xml"`,
 		},
 	}
 
@@ -163,81 +178,88 @@ func TestParse_invalid(t *testing.T) {
 	}
 }
 
-func TestParse_reports_every_invalid_env(t *testing.T) {
+func TestParse_reports(t *testing.T) {
 	t.Parallel()
 
-	var output bytes.Buffer
-
-	_, err := config.Parse("fizzbuzz", nil, env(map[string]string{
-		config.EnvMaxLimit:        "many",
-		config.EnvShutdownTimeout: "soon",
-	}), &output)
-	if !errors.Is(err, config.ErrInvalid) {
-		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
+	testcases := []struct {
+		label    string
+		args     []string
+		env      map[string]string
+		expected []string // each reported once, and in the returned error
+		unwanted []string // not reported
+	}{
+		{
+			label:    "should report every invalid env",
+			env:      map[string]string{config.EnvMaxLimit: "many", config.EnvShutdownTimeout: "soon"},
+			expected: []string{`FIZZBUZZ_MAX_LIMIT="many"`, `FIZZBUZZ_SHUTDOWN_TIMEOUT="soon"`},
+		},
+		{
+			label: "should report every error",
+			args:  []string{"-addr=localhost", "-shutdown-timeout=0s", "-log-format=yaml"},
+			env:   map[string]string{config.EnvMaxLimit: "many", config.EnvLogFormat: "xml"},
+			expected: []string{
+				`FIZZBUZZ_MAX_LIMIT="many"`,
+				`FIZZBUZZ_LOG_FORMAT="xml"`,
+				`addr "localhost"`,
+				`log format "yaml"`,
+				"shutdown timeout 0s: must be positive",
+			},
+		},
+		{
+			label: "should report the invalid env with an invalid flag",
+			args:  []string{"-port=80"},
+			env:   map[string]string{config.EnvMaxLimit: "many", config.EnvLogFormat: "xml"},
+			expected: []string{
+				"flag provided but not defined: -port",
+				`FIZZBUZZ_MAX_LIMIT="many"`,
+				`FIZZBUZZ_LOG_FORMAT="xml"`,
+			},
+		},
+		{
+			// the flags after the invalid one are not parsed, so a flag
+			// before it may still be replaced
+			label:    "should not validate the flags before an invalid flag",
+			args:     []string{"-addr=localhost", "-port=80", "-addr=:9090"},
+			expected: []string{"flag provided but not defined: -port"},
+			unwanted: []string{`addr "localhost"`},
+		},
+		{
+			// "-addr=:9090" after "serve" is an argument, not a flag
+			label:    "should not validate the flags before unexpected arguments",
+			args:     []string{"-addr=localhost", "serve", "-addr=:9090"},
+			env:      map[string]string{config.EnvLogFormat: "xml"},
+			expected: []string{`unexpected arguments ["serve" "-addr=:9090"]`, `FIZZBUZZ_LOG_FORMAT="xml"`},
+			unwanted: []string{`addr "localhost"`},
+		},
 	}
 
-	for _, name := range []string{config.EnvMaxLimit, config.EnvShutdownTimeout} {
-		if !strings.Contains(output.String(), name) {
-			t.Fatalf("%s not reported in %q", name, output.String())
-		}
-	}
-}
+	for _, tc := range testcases {
+		t.Run(tc.label, func(t *testing.T) {
+			t.Parallel()
 
-func TestParse_reports_invalid_env_with_invalid_flag(t *testing.T) {
-	t.Parallel()
+			var output bytes.Buffer
 
-	var output bytes.Buffer
+			_, err := config.Parse("fizzbuzz", tc.args, env(tc.env), &output)
+			if !errors.Is(err, config.ErrInvalid) {
+				t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
+			}
 
-	_, err := config.Parse("fizzbuzz", []string{"-port=80"}, env(map[string]string{
-		config.EnvMaxLimit: "many",
-	}), &output)
-	if !errors.Is(err, config.ErrInvalid) {
-		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
-	}
+			for _, want := range tc.expected {
+				if n := strings.Count(output.String(), want); n != 1 {
+					t.Fatalf("error reported %d times, expected once (got: %q, expected: %q)", n, output.String(), want)
+				}
 
-	for _, want := range []string{"flag provided but not defined: -port", `FIZZBUZZ_MAX_LIMIT="many"`} {
-		if !strings.Contains(output.String(), want) {
-			t.Fatalf("error not reported (got: %q, expected to contain: %q)", output.String(), want)
-		}
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
+				}
+			}
 
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
-		}
-	}
-
-	// flag reports its own error: it must not be printed a second time
-	if n := strings.Count(output.String(), "flag provided but not defined"); n != 1 {
-		t.Fatalf("flag error reported %d times: %q", n, output.String())
-	}
-}
-
-func TestParse_reports_every_error(t *testing.T) {
-	t.Parallel()
-
-	var output bytes.Buffer
-
-	_, err := config.Parse("fizzbuzz", []string{"-addr=localhost", "-shutdown-timeout=0s", "extra"}, env(map[string]string{
-		config.EnvMaxLimit:  "many",
-		config.EnvLogFormat: "xml",
-	}), &output)
-	if !errors.Is(err, config.ErrInvalid) {
-		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
-	}
-
-	for _, want := range []string{
-		`FIZZBUZZ_MAX_LIMIT="many"`,
-		`unexpected arguments ["extra"]`,
-		`addr "localhost"`,
-		`log format "xml"`,
-		"shutdown timeout 0s: must be positive",
-	} {
-		if !strings.Contains(output.String(), want) {
-			t.Fatalf("error not reported (got: %q, expected to contain: %q)", output.String(), want)
-		}
-
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
-		}
+			for _, unwanted := range tc.unwanted {
+				if strings.Contains(output.String(), unwanted) {
+					t.Fatalf("unexpected error reported (got: %q, not expected: %q)", output.String(), unwanted)
+				}
+			}
+		})
 	}
 }
 
@@ -265,17 +287,21 @@ func TestParse_help_keeps_defaults_with_invalid_env(t *testing.T) {
 	var output bytes.Buffer
 
 	_, err := config.Parse("fizzbuzz", []string{"-h"}, env(map[string]string{
+		config.EnvAddr:            "localhost",
 		config.EnvLogLevel:        "verbose",
+		config.EnvLogFormat:       "xml",
 		config.EnvMaxLimit:        "99999999999999999999", // out of range: Atoi returns math.MaxInt with its error
 		config.EnvMaxStringLength: "-99999999999999999999",
-		config.EnvShutdownTimeout: "soon",
+		config.EnvShutdownTimeout: "-5s", // parses, but must be positive
 	}), &output)
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("unexpected error (got: %v, expected: %v)", err, flag.ErrHelp)
 	}
 
 	// an invalid value must not replace the built-in default shown in the usage
-	for _, want := range []string{"(default INFO)", "(default 1024)", "(default 64)", "(default 10s)"} {
+	for _, want := range []string{
+		`(default ":8080")`, "(default INFO)", `(default "text")`, "(default 1024)", "(default 64)", "(default 10s)",
+	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("usage does not mention %s: %q", want, output.String())
 		}

@@ -8,12 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- An invalid flag no longer hides invalid `FIZZBUZZ_*` environment variables:
-  both are reported in the same run.
-- An invalid `FIZZBUZZ_*` environment variable no longer hides the flag's
-  default in the `-h` usage.
-- Every invalid setting is reported at startup, not just the first one:
-  environment variables, unexpected arguments, and invalid values.
+- Invalid `FIZZBUZZ_*` environment variables are all reported at startup,
+  together with an invalid flag, unexpected arguments or invalid flag values,
+  instead of one error per run. The `-max-limit` and `-max-str-length` bounds
+  are still checked afterwards, by `fizzbuzz.NewGenerator`, one at a time.
+- A `FIZZBUZZ_*` variable is checked on its own, like its flag: an invalid
+  address, log format or shutdown timeout is rejected even when a flag
+  replaces it, and no longer shows up as the flag's default in `-h`.
 
 ## [0.3.0] - 2026-09-30
 
