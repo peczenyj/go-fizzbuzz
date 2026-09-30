@@ -133,8 +133,8 @@ func (c *Config) readEnv(getenv func(string) string) error {
 	parse(EnvAddr, setIfValid(&c.Addr, checked(asString, checkAddr)))
 	parse(EnvLogLevel, setIfValid(&c.LogLevel, parseLevel))
 	parse(EnvLogFormat, setIfValid(&c.LogFormat, checked(asString, checkLogFormat)))
-	parse(EnvMaxLimit, setIfValid(&c.MaxLimit, strconv.Atoi))
-	parse(EnvMaxStringLength, setIfValid(&c.MaxStringLength, strconv.Atoi))
+	parse(EnvMaxLimit, setIfValid(&c.MaxLimit, parseInt))
+	parse(EnvMaxStringLength, setIfValid(&c.MaxStringLength, parseInt))
 	parse(EnvShutdownTimeout, setIfValid(&c.ShutdownTimeout, checked(time.ParseDuration, checkShutdownTimeout)))
 
 	return errors.Join(errs...)
@@ -175,8 +175,23 @@ func parseLevel(v string) (level slog.Level, err error) {
 	return level, err
 }
 
+// parseInt parses an integer with the same syntax as flag.IntVar: base
+// prefixes (0x, 0o, 0b), leading-zero octal and underscores.
+func parseInt(v string) (int, error) {
+	n, err := strconv.ParseInt(v, 0, strconv.IntSize)
+
+	return int(n), err
+}
+
+// checkAddr checks a host:port address, and that its port could be listened
+// on: a number up to 65535 or a known service name.
 func checkAddr(addr string) error {
-	_, _, err := net.SplitHostPort(addr)
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+
+	_, err = net.LookupPort("tcp", port)
 
 	return err
 }

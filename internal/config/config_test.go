@@ -75,6 +75,20 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
+			// the same syntax as the flags: base prefixes, leading-zero octal and underscores
+			label: "should read integers from the environment like the flags",
+			env:   map[string]string{config.EnvMaxLimit: "0x400", config.EnvMaxStringLength: "010"},
+			expected: func(c *config.Config) {
+				c.MaxLimit = 1024
+				c.MaxStringLength = 8
+			},
+		},
+		{
+			label:    "should accept an address with port 0",
+			args:     []string{"-addr=localhost:0"},
+			expected: func(c *config.Config) { c.Addr = "localhost:0" },
+		},
+		{
 			label:    "should accept a case-insensitive log level",
 			env:      map[string]string{config.EnvLogLevel: "WARN"},
 			expected: func(c *config.Config) { c.LogLevel = slog.LevelWarn },
@@ -140,6 +154,10 @@ func TestParse_invalid(t *testing.T) {
 		{label: "invalid duration flag", args: []string{"-shutdown-timeout=10"}, output: `invalid value "10" for flag -shutdown-timeout`},
 		{label: "zero shutdown timeout", args: []string{"-shutdown-timeout=0s"}, output: "shutdown timeout 0s: must be positive"},
 		{label: "address without port", args: []string{"-addr=localhost"}, output: `addr "localhost"`},
+		{label: "port out of range", args: []string{"-addr=:99999"}, output: `addr ":99999"`},
+		{label: "unknown port", args: []string{"-addr=:nope"}, output: `addr ":nope"`},
+		{label: "port out of range env", env: map[string]string{config.EnvAddr: ":65536"}, output: `FIZZBUZZ_ADDR=":65536"`},
+		{label: "invalid octal integer env", env: map[string]string{config.EnvMaxLimit: "08"}, output: `FIZZBUZZ_MAX_LIMIT="08"`},
 		{label: "invalid log level env", env: map[string]string{config.EnvLogLevel: "verbose"}, output: `FIZZBUZZ_LOG_LEVEL="verbose"`},
 		{label: "invalid log format env", env: map[string]string{config.EnvLogFormat: "xml"}, output: `FIZZBUZZ_LOG_FORMAT="xml": must be "text" or "json"`},
 		{label: "address without port env", env: map[string]string{config.EnvAddr: "localhost"}, output: `FIZZBUZZ_ADDR="localhost"`},

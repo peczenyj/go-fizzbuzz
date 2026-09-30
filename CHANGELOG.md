@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A `FIZZBUZZ_*` variable is checked on its own, like its flag: an invalid
   address, log format or shutdown timeout is rejected even when a flag
   replaces it, and no longer shows up as the flag's default in `-h`.
+- `FIZZBUZZ_MAX_LIMIT` and `FIZZBUZZ_MAX_STR_LENGTH` accept the same integer
+  syntax as their flags (`0x400`, `1_000`, and `010` as octal), instead of
+  base 10 only.
+- An invalid port in `-addr` or `FIZZBUZZ_ADDR`, such as `:99999`, is rejected
+  at startup with exit code 2, instead of failing to listen with exit code 1.
 
 ## [0.3.0] - 2026-09-30
 
