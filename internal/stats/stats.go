@@ -2,14 +2,6 @@ package stats
 
 import "sync"
 
-var _ Interface[string] = (*Counter[string])(nil)
-
-// Interface abstraction.
-type Interface[K comparable] interface {
-	Record(k K)
-	Top() (key K, hits int, ok bool)
-}
-
 // Counter counts occurrences of keys and tracks the most frequent one in O(1).
 // It is safe for concurrent use.
 type Counter[K comparable] struct {

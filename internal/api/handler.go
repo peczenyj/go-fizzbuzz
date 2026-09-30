@@ -8,11 +8,13 @@ import (
 	"net/url"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
+	"github.com/peczenyj/go-fizzbuzz/internal/stats"
 )
 
 var (
 	_ fizzbuzz.QueryValues = url.Values{}
 	_ Generator            = (*fizzbuzz.Generator)(nil)
+	_ Statistics           = (*stats.Counter[fizzbuzz.Params])(nil)
 	_ http.Handler         = (*API)(nil)
 )
 
@@ -26,22 +28,37 @@ type Generator interface {
 	Generate(p fizzbuzz.Params) ([]string, error)
 }
 
+// Statistics records successful requests and reports the most frequent one.
+type Statistics interface {
+	Record(p fizzbuzz.Params)
+	Top() (p fizzbuzz.Params, hits int, ok bool)
+}
+
 // API is the HTTP interface of the service. It routes requests itself, so
 // tests exercise the same routing as production.
 type API struct {
-	mux       *http.ServeMux
-	generator Generator
+	mux        *http.ServeMux
+	generator  Generator
+	statistics Statistics
 }
 
 // New returns an API serving /healthz and /fizzbuzz with gen.
-// It panics if gen is nil: that is a wiring bug, not a runtime condition.
-func New(gen Generator) *API {
+// It panics if gen or st is nil: that is a wiring bug, not a runtime condition.
+func New(gen Generator, st Statistics) *API {
 	if gen == nil {
 		panic("api.New: nil Generator")
 	}
-	a := &API{mux: http.NewServeMux(), generator: gen}
+
+	if st == nil {
+		panic("api.New: nil Statistics")
+	}
+
+	a := &API{mux: http.NewServeMux(), generator: gen, statistics: st}
+
 	a.mux.HandleFunc("GET /healthz", a.handleHealthz)
 	a.mux.HandleFunc("GET /fizzbuzz", a.handleFizzBuzz)
+	a.mux.HandleFunc("GET /statistics", a.handleStatistics)
+
 	return a
 }
 
@@ -71,7 +88,47 @@ func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.statistics.Record(params)
+
 	writeJSON(w, http.StatusOK, result)
+}
+
+// ParamsBody is the JSON form of a fizzbuzz request.
+type ParamsBody struct {
+	Int1  int    `json:"int1"`
+	Int2  int    `json:"int2"`
+	Limit int    `json:"limit"`
+	Str1  string `json:"str1"`
+	Str2  string `json:"str2"`
+}
+
+// StatisticsBody is the JSON body of GET /statistics; Params is null until
+// a request succeeded.
+type StatisticsBody struct {
+	Params *ParamsBody `json:"params"`
+	Hits   int         `json:"hits"`
+}
+
+func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
+	// if r.Method != http.MethodGet {
+	// 	w.WriteHeader(http.StatusOK)
+
+	// 	return
+	// }
+
+	if r.URL.RawQuery != "" {
+		writeJSON(w, http.StatusBadRequest, &ErrorBody{Error: "unexpected parameter"})
+
+		return
+	}
+
+	var body StatisticsBody
+	if p, hits, ok := a.statistics.Top(); ok {
+		body.Params = &ParamsBody{Int1: p.Int1, Int2: p.Int2, Limit: p.Limit, Str1: p.Str1, Str2: p.Str2}
+		body.Hits = hits
+	}
+
+	writeJSON(w, http.StatusOK, &body)
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, result any) {

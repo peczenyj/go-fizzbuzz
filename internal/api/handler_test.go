@@ -18,12 +18,14 @@ func TestRequests(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		label           string
-		method          string
-		target          string
-		statusCode      int
-		responseBody    []byte
-		expectedHeaders map[string]string
+		label                 string
+		method                string
+		target                string
+		statusCode            int
+		responseBody          []byte
+		skipResponseBodyCheck bool
+		verifyResponseBody    func(*testing.T, []byte)
+		expectedHeaders       map[string]string
 	}{
 		{
 			label:      "should return 200 OK in case of GET on /healthz",
@@ -81,13 +83,81 @@ func TestRequests(t *testing.T) {
 				"Content-Type": "application/json",
 			},
 		},
+		{
+			label:                 "should return 200 OK if call GET /statistics",
+			method:                http.MethodGet,
+			target:                "/statistics",
+			statusCode:            http.StatusOK,
+			skipResponseBodyCheck: true,
+			verifyResponseBody: func(t *testing.T, b []byte) {
+				t.Helper()
+
+				var statsBody api.StatisticsBody
+
+				err := json.Unmarshal(b, &statsBody)
+				if err != nil {
+					t.Fatalf("unexpected error while decode response json body: %v", err)
+				}
+
+				var zero api.StatisticsBody
+
+				if statsBody != zero {
+					t.Fatalf("unexpected json body (got: %v, expected: %v)", statsBody, zero)
+				}
+			},
+			expectedHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+		},
+		{
+			// httptest.ResponseRecorder keeps the body on HEAD; the real server drops it.
+			label:                 "should return 200 OK if call HEAD /statistics",
+			method:                http.MethodHead,
+			target:                "/statistics",
+			statusCode:            http.StatusOK,
+			skipResponseBodyCheck: true,
+			expectedHeaders:       map[string]string{"Content-Type": "application/json"},
+		},
+		{
+			label:        "should return 405 Method Not Allowed if call POST /statistics",
+			method:       http.MethodPost,
+			target:       "/statistics",
+			statusCode:   http.StatusMethodNotAllowed,
+			responseBody: []byte("Method Not Allowed\n"),
+		},
+		{
+			label:                 "should return error if call GET /statistics with any parameter",
+			method:                http.MethodGet,
+			target:                "/statistics?foo=bar",
+			statusCode:            http.StatusBadRequest,
+			skipResponseBodyCheck: true,
+			verifyResponseBody: func(t *testing.T, b []byte) {
+				t.Helper()
+
+				var errorBody api.ErrorBody
+
+				err := json.Unmarshal(b, &errorBody)
+				if err != nil {
+					t.Fatalf("unexpected error while decode response json body: %v", err)
+				}
+
+				expected := api.ErrorBody{Error: `unexpected parameter`}
+
+				if errorBody != expected {
+					t.Fatalf("unexpected json body (got: %v, expected: %v)", errorBody, expected)
+				}
+			},
+			expectedHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.label, func(t *testing.T) {
 			t.Parallel()
 
-			handler := api.New(fizzbuzz.DefaultGenerator())
+			handler := api.New(fizzbuzz.DefaultGenerator(), api.NopStatistics())
 
 			statusCode, responseBody, responseHeaders := doRequest(t, handler, tc.method, tc.target)
 
@@ -95,8 +165,14 @@ func TestRequests(t *testing.T) {
 				t.Fatalf("unexpected http status code from endpoint /healthz (got: %v, expected: %v)", statusCode, tc.statusCode)
 			}
 
-			if !bytes.Equal(responseBody, tc.responseBody) {
-				t.Fatalf("unexpected http body (got: %v, expected: %v)", string(responseBody), string(tc.responseBody))
+			if !tc.skipResponseBodyCheck {
+				if !bytes.Equal(responseBody, tc.responseBody) {
+					t.Fatalf("unexpected http body (got: %v, expected: %v)", string(responseBody), string(tc.responseBody))
+				}
+			}
+
+			if tc.verifyResponseBody != nil {
+				tc.verifyResponseBody(t, responseBody)
 			}
 
 			for key, value := range tc.expectedHeaders {
@@ -112,9 +188,11 @@ func TestFizzBuzzHandler(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		label     string
-		target    string
-		generator api.Generator
+		label  string
+		target string
+
+		buildGenerator  func(t *testing.T) api.Generator
+		buildStatistics func(t *testing.T) api.Statistics
 
 		errStatusCode int
 		errBody       *api.ErrorBody
@@ -171,6 +249,49 @@ func TestFizzBuzzHandler(t *testing.T) {
 			target: "/fizzbuzz?int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
 			expected: []string{
 				"1",
+			},
+		},
+		{
+			label:  "should return one element if limit is 1 and increment statistics",
+			target: "/fizzbuzz?int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
+			expected: []string{
+				"1",
+			},
+			buildStatistics: func(t *testing.T) api.Statistics {
+				t.Helper()
+
+				st := &statisticsMock{}
+
+				t.Cleanup(func() {
+					expected := []fizzbuzz.Params{
+						{Int1: 3, Int2: 5, Limit: 1, Str1: "fizz", Str2: "buzz"},
+					}
+
+					if !slices.Equal(st.records, expected) {
+						t.Fatalf("unexpected statistics records (got: %v, expected: %v)", st.records, expected)
+					}
+				})
+
+				return st
+			},
+		},
+		{
+			label:         "should not record statistics if the request is invalid",
+			target:        "/fizzbuzz?int1=0&int2=5&limit=15&str1=fizz&str2=buzz",
+			errStatusCode: http.StatusBadRequest,
+			errBody:       &api.ErrorBody{Error: "invalid parameter", Field: "int1", Reason: "must be bigger than zero"},
+			buildStatistics: func(t *testing.T) api.Statistics {
+				t.Helper()
+
+				st := &statisticsMock{}
+
+				t.Cleanup(func() {
+					if len(st.records) != 0 {
+						t.Fatalf("invalid request was recorded: %v", st.records)
+					}
+				})
+
+				return st
 			},
 		},
 		{
@@ -291,9 +412,25 @@ func TestFizzBuzzHandler(t *testing.T) {
 		{
 			label:  "should return 500 internal server error in case of unexpected error",
 			target: "/fizzbuzz?int1=3&int2=5&limit=1&str1=fizz&str2=buzz",
-			generator: generatorFunc(func(fizzbuzz.Params) ([]string, error) {
-				return nil, errors.New("ops")
-			}),
+			buildGenerator: func(t *testing.T) api.Generator {
+				t.Helper()
+
+				var calls int
+
+				t.Cleanup(func() {
+					t.Helper()
+
+					if calls != 1 {
+						t.Fatalf("unexpected number of calls on fizzbuzz generator (got: %v, expected: %v)", calls, 1)
+					}
+				})
+
+				return generatorFunc(func(fizzbuzz.Params) ([]string, error) {
+					calls++
+
+					return nil, errors.New("ops")
+				})
+			},
 			errStatusCode: http.StatusInternalServerError,
 			errBody:       &api.ErrorBody{Error: `internal error`},
 			verifyErrorResponseBody: func(t *testing.T, responseBody []byte) {
@@ -312,11 +449,17 @@ func TestFizzBuzzHandler(t *testing.T) {
 
 			var generator api.Generator = fizzbuzz.DefaultGenerator()
 
-			if tc.generator != nil {
-				generator = tc.generator
+			if tc.buildGenerator != nil {
+				generator = tc.buildGenerator(t)
 			}
 
-			handler := api.New(generator)
+			statistics := api.NopStatistics()
+
+			if tc.buildStatistics != nil {
+				statistics = tc.buildStatistics(t)
+			}
+
+			handler := api.New(generator, statistics)
 
 			statusCode, responseBody, responseHeaders := doRequest(t, handler, http.MethodGet, tc.target)
 
@@ -392,7 +535,23 @@ func TestAPIConstructor_panic_on_nil_generator(t *testing.T) {
 		}
 	}()
 
-	_ = api.New(nil)
+	_ = api.New(nil, nil)
+
+	t.Fatalf("a panic is expected")
+}
+
+func TestAPIConstructor_panic_on_nil_statistics(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		expected := `api.New: nil Statistics`
+
+		if got := recover(); got != expected {
+			t.Fatalf("recover from panic: (got: %v, expected: %v)", got, expected)
+		}
+	}()
+
+	_ = api.New(fizzbuzz.DefaultGenerator(), nil)
 
 	t.Fatalf("a panic is expected")
 }
@@ -409,12 +568,14 @@ func TestFizzBuzzHandler_passes_params_and_result_through(t *testing.T) {
 	// the handler writes the generator's result verbatim.
 	canned := []string{"a", "b", "c"}
 
-	handler := api.New(generatorFunc(func(p fizzbuzz.Params) ([]string, error) {
+	gen := generatorFunc(func(p fizzbuzz.Params) ([]string, error) {
 		calls++
 		got = p
 
 		return canned, nil
-	}))
+	})
+	st := fizzbuzz.DefaultStatistics()
+	handler := api.New(gen, st)
 
 	// URL-encoded values: a comma, a space and a multi-byte rune.
 	target := "/fizzbuzz?int1=7&int2=11&limit=42&str1=x%2Cy&str2=%C3%A9%20%F0%9F%8D%95"
@@ -444,10 +605,33 @@ func TestFizzBuzzHandler_passes_params_and_result_through(t *testing.T) {
 	}
 }
 
+var _ api.Generator = generatorFunc(nil)
+
 // generatorFunc is an api.Generate stub
 type generatorFunc func(fizzbuzz.Params) ([]string, error)
 
 func (f generatorFunc) Generate(p fizzbuzz.Params) ([]string, error) { return f(p) }
+
+var _ api.Statistics = (*statisticsMock)(nil)
+
+type topResponse struct {
+	p    fizzbuzz.Params
+	hits int
+	ok   bool
+}
+
+type statisticsMock struct {
+	records     []fizzbuzz.Params
+	topResponse topResponse
+}
+
+func (m *statisticsMock) Record(p fizzbuzz.Params) {
+	m.records = append(m.records, p)
+}
+
+func (m *statisticsMock) Top() (p fizzbuzz.Params, hits int, ok bool) {
+	return m.topResponse.p, m.topResponse.hits, m.topResponse.ok
+}
 
 func doRequest(t *testing.T,
 	handler http.Handler,

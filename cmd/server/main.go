@@ -61,7 +61,7 @@ func RunServer(ctx context.Context) error {
 
 	server := &http.Server{
 		Addr:              defaultListenerAddress,
-		Handler:           api.New(fizzbuzz.DefaultGenerator()),
+		Handler:           api.New(fizzbuzz.DefaultGenerator(), fizzbuzz.DefaultStatistics()),
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 		ReadTimeout:       defaultReadTimeout,
 		WriteTimeout:      defaultWriteTimeout,

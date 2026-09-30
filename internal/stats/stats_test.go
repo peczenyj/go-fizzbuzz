@@ -45,7 +45,7 @@ func TestCounter_multiple_hits(t *testing.T) {
 }
 
 func assertStatsTop[K comparable](t *testing.T,
-	c stats.Interface[K],
+	c *stats.Counter[K],
 	expectedKey K,
 	expectedHits int,
 	expectedOk bool,
