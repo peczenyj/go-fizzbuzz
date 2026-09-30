@@ -59,15 +59,16 @@ func Default() Config {
 
 // Parse reads args (without the program name), using getenv for defaults.
 // Errors and usage are written to output. It returns flag.ErrHelp for -h,
-// and an error wrapping ErrInvalid for an invalid value. With -version, the
-// other values are not validated.
+// and an error wrapping ErrInvalid for an invalid value; every invalid value
+// is reported, not just the first one. With -version, the other values are
+// not validated.
 //
 // MaxLimit and MaxStringLength are only parsed here: their bounds belong to
 // fizzbuzz.NewGenerator.
 func Parse(name string, args []string, getenv func(string) string, output io.Writer) (Config, error) {
 	cfg := Default()
 
-	envErr := cfg.readEnv(getenv)
+	errs := []error{cfg.readEnv(getenv)}
 
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -80,36 +81,32 @@ func Parse(name string, args []string, getenv func(string) string, output io.Wri
 	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "grace period for in-flight requests on shutdown (env "+EnvShutdownTimeout+")")
 	fs.BoolVar(&cfg.ShowVersion, "version", false, "print the version and exit")
 
-	if err := fs.Parse(args); err != nil {
-		// flag has already reported the error and the usage.
-		if errors.Is(err, flag.ErrHelp) {
-			return Config{}, err
-		}
+	// flag reports its own error and the usage, so flagErr is only returned.
+	var flagErr error
 
-		// Report the invalid environment too, so that one run shows every error.
-		if envErr != nil {
-			fmt.Fprintf(output, "%s: %v\n", name, envErr)
-		}
-
-		return Config{}, errors.Join(fmt.Errorf("%w: %w", ErrInvalid, err), envErr)
-	}
-
-	if cfg.ShowVersion {
+	switch err := fs.Parse(args); {
+	case errors.Is(err, flag.ErrHelp):
+		return Config{}, err
+	case err != nil:
+		// The flags after the invalid one are not parsed: validating cfg
+		// could reject values those flags would have replaced.
+		flagErr = fmt.Errorf("%w: %w", ErrInvalid, err)
+	case cfg.ShowVersion:
 		return cfg, nil
+	default:
+		if fs.NArg() > 0 {
+			errs = append(errs, fmt.Errorf("%w: unexpected arguments %q", ErrInvalid, fs.Args()))
+		}
+
+		errs = append(errs, cfg.validate())
 	}
 
-	err := envErr
-	if err == nil && fs.NArg() > 0 {
-		err = fmt.Errorf("%w: unexpected arguments %q", ErrInvalid, fs.Args())
-	}
-
-	if err == nil {
-		err = cfg.validate()
-	}
-
+	err := errors.Join(errs...)
 	if err != nil {
 		fmt.Fprintf(output, "%s: %v\n", name, err)
+	}
 
+	if err = errors.Join(flagErr, err); err != nil {
 		return Config{}, err
 	}
 
@@ -130,7 +127,7 @@ func (c *Config) readEnv(getenv func(string) string) error {
 	}
 
 	parse(EnvAddr, func(v string) error { c.Addr = v; return nil })
-	parse(EnvLogLevel, func(v string) error { return c.LogLevel.UnmarshalText([]byte(v)) })
+	parse(EnvLogLevel, setIfValid(&c.LogLevel, parseLevel))
 	parse(EnvLogFormat, func(v string) error { c.LogFormat = v; return nil })
 	parse(EnvMaxLimit, setIfValid(&c.MaxLimit, strconv.Atoi))
 	parse(EnvMaxStringLength, setIfValid(&c.MaxStringLength, strconv.Atoi))
@@ -152,20 +149,31 @@ func setIfValid[T any](dst *T, parse func(string) (T, error)) func(string) error
 	}
 }
 
+// parseLevel parses a log level name, such as "debug" or "warn".
+func parseLevel(v string) (level slog.Level, err error) {
+	err = level.UnmarshalText([]byte(v))
+
+	return level, err
+}
+
+// validate checks the values that parsing alone cannot. It reports every
+// invalid value, not just the first one.
 func (c *Config) validate() error {
+	var errs []error
+
 	if _, _, err := net.SplitHostPort(c.Addr); err != nil {
-		return fmt.Errorf("%w: addr %q: %w", ErrInvalid, c.Addr, err)
+		errs = append(errs, fmt.Errorf("%w: addr %q: %w", ErrInvalid, c.Addr, err))
 	}
 
 	if c.LogFormat != LogFormatText && c.LogFormat != LogFormatJSON {
-		return fmt.Errorf("%w: log format %q: must be %q or %q", ErrInvalid, c.LogFormat, LogFormatText, LogFormatJSON)
+		errs = append(errs, fmt.Errorf("%w: log format %q: must be %q or %q", ErrInvalid, c.LogFormat, LogFormatText, LogFormatJSON))
 	}
 
 	if c.ShutdownTimeout <= 0 {
-		return fmt.Errorf("%w: shutdown timeout %v: must be positive", ErrInvalid, c.ShutdownTimeout)
+		errs = append(errs, fmt.Errorf("%w: shutdown timeout %v: must be positive", ErrInvalid, c.ShutdownTimeout))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // NewLogger returns a logger writing to w in the configured format and level.
