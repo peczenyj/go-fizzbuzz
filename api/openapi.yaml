@@ -1,0 +1,251 @@
+openapi: 3.1.0
+
+info:
+  title: go-fizzbuzz
+  version: 0.3.1
+  summary: Configurable fizz-buzz REST API with request statistics.
+  description: |
+    Every endpoint also accepts `HEAD`, which returns the same status and headers
+    without a body. Other methods return `405 Method Not Allowed`.
+
+    `maximum: 1024` on `limit` and `maxLength: 64` on `str1`/`str2` are the
+    default server limits, configurable with `-max-limit` and `-max-str-length`.
+    String lengths are checked in **bytes**, not characters.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: /
+    description: The host serving this document (the default address is http://localhost:8080)
+
+# No authentication: the service is meant to run behind the platform's ingress.
+security: []
+
+tags:
+  - name: fizzbuzz
+    description: The fizz-buzz sequence and its request statistics.
+  - name: operations
+    description: Endpoints for the platform, such as Kubernetes probes.
+
+paths:
+  /fizzbuzz:
+    get:
+      operationId: getFizzBuzz
+      tags: [fizzbuzz]
+      summary: Generate a fizz-buzz sequence
+      description: |
+        Returns the numbers from 1 to `limit`, where multiples of `int1` are
+        replaced by `str1`, multiples of `int2` by `str2`, and multiples of both
+        by `str1str2`.
+
+        A successful request is counted in `/statistics`.
+      parameters:
+        - $ref: "#/components/parameters/Int1"
+        - $ref: "#/components/parameters/Int2"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Str1"
+        - $ref: "#/components/parameters/Str2"
+      responses:
+        "200":
+          description: The sequence.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              example: ["1", "2", "fizz", "4", "buzz", "fizz", "7", "8", "fizz", "buzz", "11", "fizz", "13", "14", "fizzbuzz"]
+        "400":
+          $ref: "#/components/responses/InvalidParameter"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /statistics:
+    get:
+      operationId: getStatistics
+      tags: [fizzbuzz]
+      summary: Most frequent successful fizz-buzz request
+      description: |
+        Only successful `GET` and `HEAD /fizzbuzz` requests are counted.
+        Parameters are compared after decoding, so the same request written
+        differently counts once. On a tie, the first request to reach the count
+        is reported. Before any successful request, `params` is `null` and
+        `hits` is `0`.
+      responses:
+        "200":
+          description: The most frequent request and its number of hits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Statistics"
+              examples:
+                top:
+                  summary: After two identical requests
+                  value:
+                    params: { int1: 3, int2: 5, limit: 15, str1: fizz, str2: buzz }
+                    hits: 2
+                empty:
+                  summary: Before any successful request
+                  value:
+                    params: null
+                    hits: 0
+        "400":
+          description: The endpoint accepts no query parameter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: unexpected parameter
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /healthz:
+    get:
+      operationId: getHealthz
+      tags: [operations]
+      summary: Liveness and readiness probe
+      description: The service has no dependencies, so alive and ready mean the same thing.
+      responses:
+        "200":
+          description: The server is up. The body is empty.
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+components:
+  parameters:
+    Int1:
+      name: int1
+      in: query
+      required: true
+      description: Multiples of this number are replaced by `str1`.
+      schema:
+        type: integer
+        minimum: 1
+      example: 3
+    Int2:
+      name: int2
+      in: query
+      required: true
+      description: Multiples of this number are replaced by `str2`.
+      schema:
+        type: integer
+        minimum: 1
+      example: 5
+    Limit:
+      name: limit
+      in: query
+      required: true
+      description: Length of the sequence. The maximum is set by `-max-limit` (default 1024).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1024
+      example: 15
+    Str1:
+      name: str1
+      in: query
+      required: true
+      description: Replaces multiples of `int1`. At most `-max-str-length` bytes (default 64).
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      example: fizz
+    Str2:
+      name: str2
+      in: query
+      required: true
+      description: Replaces multiples of `int2`. At most `-max-str-length` bytes (default 64).
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      example: buzz
+
+  schemas:
+    Params:
+      type: object
+      description: The parameters of a fizz-buzz request.
+      required: [int1, int2, limit, str1, str2]
+      properties:
+        int1:
+          type: integer
+        int2:
+          type: integer
+        limit:
+          type: integer
+        str1:
+          type: string
+        str2:
+          type: string
+    Statistics:
+      type: object
+      required: [params, hits]
+      properties:
+        params:
+          description: The most frequent request, or `null` before any successful request.
+          oneOf:
+            - $ref: "#/components/schemas/Params"
+            - type: "null"
+        hits:
+          type: integer
+          minimum: 0
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    ParamError:
+      description: An invalid parameter. Only the first error found is reported.
+      allOf:
+        - $ref: "#/components/schemas/Error"
+        - type: object
+          required: [field, reason]
+          properties:
+            field:
+              type: string
+              enum: [int1, int2, limit, str1, str2]
+            reason:
+              type: string
+              examples:
+                - required
+                - must be an integer
+                - must be bigger than zero
+                - must not exceed max value 1024
+
+  responses:
+    InvalidParameter:
+      description: A parameter is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ParamError"
+          example:
+            error: invalid parameter
+            field: limit
+            reason: must not exceed max value 1024
+    MethodNotAllowed:
+      description: Only `GET` and `HEAD` are allowed. The body is plain text.
+      headers:
+        Allow:
+          schema:
+            type: string
+          example: GET, HEAD
+      content:
+        text/plain:
+          schema:
+            type: string
+          example: Method Not Allowed
+    InternalError:
+      description: Unexpected failure. The details are logged, never returned.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: internal error

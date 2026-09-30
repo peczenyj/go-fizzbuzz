@@ -1,12 +1,13 @@
 GO       ?= go
 BIN      := bin/fizzbuzz
 FUZZTIME ?= 30s
+REDOCLY  ?= @redocly/cli@2.57.0
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X main.version=$(VERSION) -X main.revision=$(REVISION)
 
 .DEFAULT_GOAL := help
-.PHONY: help build run test cover fuzz bench lint fmt tidy docker clean
+.PHONY: help build run test cover fuzz bench lint openapi fmt tidy docker clean
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-8s %s\n",$$1,$$2}'
@@ -38,6 +39,9 @@ bench: ## Run benchmarks with allocation stats
 lint: ## go vet + golangci-lint
 	$(GO) vet ./...
 	golangci-lint run ./...
+
+openapi: ## Lint api/openapi.yaml (needs npx)
+	npx --yes $(REDOCLY) lint api/openapi.yaml
 
 fmt: ## Format the code
 	golangci-lint fmt ./...

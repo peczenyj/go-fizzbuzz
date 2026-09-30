@@ -111,6 +111,8 @@ Usage of fizzbuzz:
 
 ## API
 
+The API is described in [`api/openapi.yaml`](api/openapi.yaml) (OpenAPI 3.1), linted in CI. Paste it into [Swagger Editor](https://editor.swagger.io/) or any OpenAPI viewer to browse it.
+
 ### `GET /fizzbuzz`
 
 Returns the sequence as a JSON array of strings.
@@ -207,6 +209,7 @@ internal/config/     flags and FIZZBUZZ_* environment variables
 internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
 internal/api/        HTTP layer: routes, handlers, JSON responses
 internal/stats/      generic concurrency-safe counter with O(1) top
+api/openapi.yaml     OpenAPI 3.1 description of the API
 scripts/loadtest.sh  load test with hey (see Performance)
 .github/workflows/   CI: lint, test, vulncheck, Docker smoke test, publish on tags
 ```
@@ -223,6 +226,7 @@ $ make help
   fuzz     Fuzz each target for FUZZTIME (default 30s)
   bench    Run benchmarks with allocation stats
   lint     go vet + golangci-lint
+  openapi  Lint api/openapi.yaml (needs npx)
   fmt      Format the code
   tidy     go mod tidy + verify
   docker   Build the Docker image
@@ -298,6 +302,7 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 - **No configuration file.** Flags and environment variables cover the current settings. A file (YAML or TOML) would only be worth it with many more settings, or with settings that change without a restart.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
 - **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
+- **The OpenAPI description is written by hand.** CI checks that it is valid, but no test checks the server's responses against it, so the two can drift apart. A contract test would need a third-party OpenAPI validator, or the spec could be generated from the code.
 - **Rate limiting.** I left it out of the service on purpose; I'd expect it at the ingress or API gateway.
 
 ## How I worked
