@@ -25,6 +25,7 @@ scenarios=(
   "max limit 1024|/fizzbuzz?int1=3&int2=5&limit=1024&str1=fizz&str2=buzz"
   "worst case (~790 KB)|/fizzbuzz?int1=1&int2=1&limit=1024&str1=$worst&str2=$worst"
   "invalid (400)|/fizzbuzz?int1=0&int2=5&limit=100&str1=a&str2=b"
+  "statistics|/statistics"
 )
 
 echo "hey -z $DURATION -c $CONCURRENCY against $BASE_URL"

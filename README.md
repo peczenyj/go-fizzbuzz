@@ -111,7 +111,23 @@ Returns `200 OK` with an empty body. Kubernetes can use it for both liveness and
 
 ### `GET /statistics`
 
-Not implemented yet; planned for the next release. See [Limitations and next steps](#limitations-and-next-steps).
+Returns the most frequent successful `/fizzbuzz` request and its number of hits.
+
+```console
+$ curl -s localhost:8080/statistics
+{"params":{"int1":3,"int2":5,"limit":15,"str1":"fizz","str2":"buzz"},"hits":2}
+```
+
+Before any successful request, it returns `{"params":null,"hits":0}`: same status, same shape, so clients always parse one format.
+
+What counts as a hit:
+
+- **Only successful requests.** A request rejected with `400`, failing with `500`, or whose response couldn't be delivered is not counted.
+- **`GET` and `HEAD`.** A `HEAD /fizzbuzz` does the same work as a `GET`, without the body, so it counts as a hit too.
+- **The same request, however it is written.** Parameters are compared after decoding, so `int1=3&int2=5&…` and `int2=5&int1=3&…` are the same request, and so are `str1=fizz` and `str1=%66izz`.
+- **Ties:** when two requests have the same number of hits, the first one to reach that count is reported.
+
+The endpoint accepts no parameter: any query string returns `400` with `{"error":"unexpected parameter"}`. `HEAD` is accepted, and other methods return `405`.
 
 ## Design decisions
 
@@ -122,15 +138,19 @@ To keep the server production-ready and easy to maintain, I made the following c
 - **JSON array output.** Quoting separates values without ambiguity: `str1=a,b` can't be read as two elements. HTML-sensitive characters are escaped.
 - **Strict input.** Every parameter is required. Values that are missing, not integers, or out of range are rejected with a `400` that names the field. There are no silent defaults.
 - **Bounded input.** By default, `limit ≤ 1024` and `str1`/`str2` ≤ 64 bytes, to keep response size under control and avoid a denial-of-service risk.
-  - The limits apply to input bytes. JSON escaping can expand one byte up to 6× (`<` → `<`; control characters → `\u0001`), so the worst-case response is about 790 KB.
+  - The limits apply to input bytes. JSON escaping can expand one byte up to 6× (`<` → `\u003c`; control characters → `\u0001`), so the worst-case response is about 790 KB.
   - I measured it at 789,506 bytes, with `int1=1&int2=1&limit=1024` and 64 × `%01` in both strings.
   - The limits belong to `fizzbuzz.Generator` and can't exceed hard ceilings: 100,000 elements and 255 bytes.
 - **The domain is separate from HTTP.**
   - `internal/fizzbuzz` holds the rules: parsing (`Params.Parse`), validation, and generation. It depends on a minimal `QueryValues` interface (`url.Values` satisfies it), not on `net/http`.
-  - `internal/api` translates between HTTP and the domain. It depends on a small `Generator` interface, so tests can replace it with a fake.
+  - `internal/api` translates between HTTP and the domain. It depends on two small interfaces, `Generator` and `Statistics`, defined where they are used, so tests can replace them with fakes.
+- **Statistics as a generic counter.** `internal/stats` provides `Counter[K comparable]`, a mutex-protected map that knows nothing about fizzbuzz. It is used with `fizzbuzz.Params` as the key, which is comparable because it has only `int` and `string` fields.
+  - Counts only ever increase, so the top can change only on the key just incremented. `Record` and `Top` are O(1): there is no scan and no sort.
+  - Only successful requests are recorded, after the response is written, so invalid requests can't make themselves the most frequent, and a response that never reached the client doesn't count.
 - **Typed errors.** `ParamError{Field, Err}` wraps sentinel errors. The API maps it to a `400` with `errors.As`, and tests match reasons with `errors.Is`.
 - **A hardened HTTP server.** It sets read, header, write and idle timeouts, limits headers to 16 KiB, and shuts down gracefully with a timeout.
 - **Minimal container.** A multi-stage build produces a static binary on distroless `nonroot`, with OCI labels for version and revision.
+  - Why a container: it's the unit Kubernetes and most platforms deploy, so the same image tested by CI's smoke test runs locally and in production, with `/healthz` ready for the probes.
 
 ## Project layout
 
@@ -138,6 +158,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 cmd/server/          entry point: HTTP server, signals, graceful shutdown
 internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
 internal/api/        HTTP layer: routes, handlers, JSON responses
+internal/stats/      generic concurrency-safe counter with O(1) top
 scripts/loadtest.sh  load test with hey (see Performance)
 .github/workflows/   CI: lint, test, vulncheck, Docker smoke test, publish on tags
 ```
@@ -152,6 +173,7 @@ $ make help
   test     Run all tests with the race detector
   cover    Run tests with a coverage summary
   fuzz     Fuzz each target for FUZZTIME (default 30s)
+  bench    Run benchmarks with allocation stats
   lint     go vet + golangci-lint
   fmt      Format the code
   tidy     go mod tidy + verify
@@ -164,11 +186,13 @@ $ make help
   - `FuzzGenerate` checks that the output has `limit` elements, each one correct, or that the error is a `ParamError`.
   - `FuzzParseParams` checks that any query string yields only the documented parse errors.
   - Run `make fuzz FUZZTIME=10s`.
+- **Benchmarks:** `make bench` runs `testing.B` benchmarks for generation, the full handler and the statistics counter, with allocation stats. Results are under [Performance](#performance).
 - **Linting:** `golangci-lint` v2, configured in `.golangci.yml`. It also requires doc comments on exported identifiers.
-- **CI (GitHub Actions)** runs on every push and pull request:
+- **CI (GitHub Actions)** runs on pushes to `main` and `devel`, on version tags, and on pull requests:
   - lint
   - tests on the two supported Go releases, with coverage
   - `govulncheck`
+  - each benchmark once, so they keep compiling and running (numbers from shared runners are too noisy to compare)
   - a Docker build, then a `curl` smoke test against the running container
 - **Releases:** tags `v*` publish the image to GHCR. Dependabot keeps the GitHub Actions up to date.
 
@@ -196,11 +220,31 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 - **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 75 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
 - `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
+### Benchmarks
+
+`make bench` isolates the code from the HTTP stack and the network. These are medians of 5 runs (`-count=5`) on the same laptop, Go 1.27, so again indicative only.
+
+| Benchmark | Time/op | Memory/op | Allocs/op |
+|---|---:|---:|---:|
+| `Generate` classic 1..100 | 0.70 µs | 1.8 KB | 2 |
+| `Generate` limit 1024 | 11.8 µs | 20 KB | 496 |
+| `Generate` limit 1024, 64-byte labels | 6.5 µs | 18.6 KB | 2 |
+| handler classic 1..100 | 5.0 µs | 2.5 KB | 14 |
+| handler limit 1024 | 42.5 µs | 20.8 KB | 508 |
+| handler worst case (~790 KB) | 815 µs | 20–32 KB | 16 |
+| `Counter.Record`, 1 goroutine | 30 ns | 0 | 0 |
+| `Counter.Record`, 8 goroutines | 88 ns | 0 | 0 |
+
+- **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: escaping 790 KB of output takes about 800 µs. A faster encoder or streaming would be the next optimization, not the generator.
+- **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slice and the `str1str2` label. With only labels, it's 2 allocations whatever the size.
+- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), roughly 300× the measured `/fizzbuzz` rate of about 35,000 requests per second on 2 CPUs.
+
 ## Limitations and next steps
 
-- **`/statistics`** (the bonus) is next. The plan is a generic, concurrency-safe counter that tracks the most frequent key in O(1), and records only successful requests.
-  - The counts will be in memory, so they are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis `ZINCRBY` / `ZREVRANGE … WITHSCORES`.
-  - Every distinct request adds a key. To bound memory, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries).
+- **Statistics are in memory and per instance.** They are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis: `ZINCRBY` on each request, `ZREVRANGE … 0 0 WITHSCORES` for the top.
+- **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests grows the map for as long as the process runs. To bound it, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries) that finds the most frequent items in fixed memory.
+- **One lock for all requests.** Every successful request takes the counter's mutex. The benchmark shows about 11 million records per second under 8-way contention, far above the request rate, so this is fine at this scale; if profiling ever shows contention, shard the counter.
+- **Statistics can't be disabled.** Next: a `-statistics=false` flag that removes the `/statistics` route and stops recording, rather than serving an empty result.
 - **Configuration.** The listen address and limits are constants today. Next: environment variables for the address, log level and format, and the `limit`/string maximums, validated at startup.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
 - **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
@@ -208,4 +252,8 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 ## How I worked
 
-I wrote the code myself, and used an AI assistant for code reviews.
+I wrote the code myself, and used an AI assistant for code reviews (via Claude Code).
+
+I started with a simple approach: default http server, generate the fizzbuzz sequence using a function, implicit defaults when a query parameter is missing. The first problem that I identify is the size of the fizzbuzz sequence, it can be huge depending on the parameters and this can use a lot of resources without needed. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I start to refactor the internal code until reach the current design.
+
+There are room for improvements, but I decided to wait for feedback instead just implement everything. Also there are several third party libraries that can be used to reduce the amount of code that I wrote like [validator](https://github.com/go-playground/validator), [gorilla schema](https://github.com/gorilla/schema), [testify](https://github.com/stretchr/testify), [go-json](https://github.com/goccy/go-json) and much more.

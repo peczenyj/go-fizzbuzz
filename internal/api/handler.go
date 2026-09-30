@@ -8,11 +8,13 @@ import (
 	"net/url"
 
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
+	"github.com/peczenyj/go-fizzbuzz/internal/stats"
 )
 
 var (
 	_ fizzbuzz.QueryValues = url.Values{}
 	_ Generator            = (*fizzbuzz.Generator)(nil)
+	_ Statistics           = (*stats.Counter[fizzbuzz.Params])(nil)
 	_ http.Handler         = (*API)(nil)
 )
 
@@ -26,22 +28,37 @@ type Generator interface {
 	Generate(p fizzbuzz.Params) ([]string, error)
 }
 
+// Statistics records successful requests and reports the most frequent one.
+type Statistics interface {
+	Record(p fizzbuzz.Params)
+	Top() (p fizzbuzz.Params, hits int, ok bool)
+}
+
 // API is the HTTP interface of the service. It routes requests itself, so
 // tests exercise the same routing as production.
 type API struct {
-	mux       *http.ServeMux
-	generator Generator
+	mux        *http.ServeMux
+	generator  Generator
+	statistics Statistics
 }
 
-// New returns an API serving /healthz and /fizzbuzz with gen.
-// It panics if gen is nil: that is a wiring bug, not a runtime condition.
-func New(gen Generator) *API {
+// New returns an API serving /healthz, /fizzbuzz and /statistics with the given arguments.
+// It panics if gen or st is nil: that is a wiring bug, not a runtime condition.
+func New(gen Generator, st Statistics) *API {
 	if gen == nil {
 		panic("api.New: nil Generator")
 	}
-	a := &API{mux: http.NewServeMux(), generator: gen}
+
+	if st == nil {
+		panic("api.New: nil Statistics")
+	}
+
+	a := &API{mux: http.NewServeMux(), generator: gen, statistics: st}
+
 	a.mux.HandleFunc("GET /healthz", a.handleHealthz)
 	a.mux.HandleFunc("GET /fizzbuzz", a.handleFizzBuzz)
+	a.mux.HandleFunc("GET /statistics", a.handleStatistics)
+
 	return a
 }
 
@@ -71,10 +88,51 @@ func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	// Record only once the response is written: a request whose body could
+	// not be sent (client gone, write timeout) is not a successful request.
+	if err := writeJSON(w, http.StatusOK, result); err == nil {
+		a.statistics.Record(params)
+	}
 }
 
-func writeJSON(w http.ResponseWriter, statusCode int, result any) {
+// ParamsBody is the JSON form of a fizzbuzz request.
+type ParamsBody struct {
+	Int1  int    `json:"int1"`
+	Int2  int    `json:"int2"`
+	Limit int    `json:"limit"`
+	Str1  string `json:"str1"`
+	Str2  string `json:"str2"`
+}
+
+// StatisticsBody is the JSON body of GET /statistics; Params is null until
+// a request succeeded.
+type StatisticsBody struct {
+	Params *ParamsBody `json:"params"`
+	Hits   int         `json:"hits"`
+}
+
+func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
+	if r.URL.RawQuery != "" {
+		_ = writeJSON(w, http.StatusBadRequest, &ErrorBody{Error: "unexpected parameter"})
+
+		return
+	}
+
+	var body StatisticsBody
+	if p, hits, ok := a.statistics.Top(); ok {
+		// A conversion, not a field copy: it stops compiling if the two
+		// structs drift apart.
+		pb := ParamsBody(p)
+		body.Params = &pb
+		body.Hits = hits
+	}
+
+	_ = writeJSON(w, http.StatusOK, &body)
+}
+
+// writeJSON writes result as the JSON body with statusCode. The returned
+// error is already logged; callers only need it to know if the body was sent.
+func writeJSON(w http.ResponseWriter, statusCode int, result any) error {
 	w.Header().Set(contentTypeHeader, mediaTypeJSON)
 
 	w.WriteHeader(statusCode)
@@ -88,6 +146,8 @@ func writeJSON(w http.ResponseWriter, statusCode int, result any) {
 		slog.Warn("unexpected error while perform json encode on result",
 			slog.Any("error", err))
 	}
+
+	return err
 }
 
 // ErrorBody is the JSON body of every 4xx/5xx response; Field and Reason are
@@ -100,7 +160,7 @@ type ErrorBody struct {
 
 func writeError(w http.ResponseWriter, err error) {
 	if pe, ok := errors.AsType[*fizzbuzz.ParamError](err); ok {
-		writeJSON(w, http.StatusBadRequest, &ErrorBody{
+		_ = writeJSON(w, http.StatusBadRequest, &ErrorBody{
 			Error:  `invalid parameter`,
 			Field:  string(pe.Field),
 			Reason: pe.Err.Error(),
@@ -111,5 +171,5 @@ func writeError(w http.ResponseWriter, err error) {
 
 	slog.Error("unexpected error", slog.Any("error", err))
 
-	writeJSON(w, http.StatusInternalServerError, &ErrorBody{Error: `internal error`})
+	_ = writeJSON(w, http.StatusInternalServerError, &ErrorBody{Error: `internal error`})
 }
