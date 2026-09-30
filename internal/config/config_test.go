@@ -224,6 +224,28 @@ func TestParse_help(t *testing.T) {
 	}
 }
 
+func TestParse_help_keeps_defaults_with_invalid_env(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+
+	_, err := config.Parse("fizzbuzz", []string{"-h"}, env(map[string]string{
+		config.EnvLogLevel:        "verbose",
+		config.EnvMaxLimit:        "many",
+		config.EnvShutdownTimeout: "soon",
+	}), &output)
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("unexpected error (got: %v, expected: %v)", err, flag.ErrHelp)
+	}
+
+	// an invalid value must not replace the built-in default shown in the usage
+	for _, want := range []string{"(default INFO)", "(default 1024)", "(default 10s)"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("usage does not mention %s: %q", want, output.String())
+		}
+	}
+}
+
 func TestConfig_NewLogger(t *testing.T) {
 	t.Parallel()
 

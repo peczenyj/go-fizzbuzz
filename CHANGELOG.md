@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - An invalid flag no longer hides invalid `FIZZBUZZ_*` environment variables:
   both are reported in the same run.
+- An invalid `FIZZBUZZ_*` environment variable no longer hides the flag's
+  default in the `-h` usage.
 
 ## [0.3.0] - 2026-09-30
 

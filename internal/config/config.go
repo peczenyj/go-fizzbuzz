@@ -132,11 +132,24 @@ func (c *Config) readEnv(getenv func(string) string) error {
 	parse(EnvAddr, func(v string) error { c.Addr = v; return nil })
 	parse(EnvLogLevel, func(v string) error { return c.LogLevel.UnmarshalText([]byte(v)) })
 	parse(EnvLogFormat, func(v string) error { c.LogFormat = v; return nil })
-	parse(EnvMaxLimit, func(v string) (err error) { c.MaxLimit, err = strconv.Atoi(v); return err })
-	parse(EnvMaxStringLength, func(v string) (err error) { c.MaxStringLength, err = strconv.Atoi(v); return err })
-	parse(EnvShutdownTimeout, func(v string) (err error) { c.ShutdownTimeout, err = time.ParseDuration(v); return err })
+	parse(EnvMaxLimit, setIfValid(&c.MaxLimit, strconv.Atoi))
+	parse(EnvMaxStringLength, setIfValid(&c.MaxStringLength, strconv.Atoi))
+	parse(EnvShutdownTimeout, setIfValid(&c.ShutdownTimeout, time.ParseDuration))
 
 	return errors.Join(errs...)
+}
+
+// setIfValid returns a setter that stores the parsed value in dst only on success,
+// so an invalid value leaves the built-in default in place.
+func setIfValid[T any](dst *T, parse func(string) (T, error)) func(string) error {
+	return func(v string) error {
+		x, err := parse(v)
+		if err == nil {
+			*dst = x
+		}
+
+		return err
+	}
 }
 
 func (c *Config) validate() error {
