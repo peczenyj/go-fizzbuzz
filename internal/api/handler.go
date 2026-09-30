@@ -62,6 +62,8 @@ func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Debug("will generate fizzbuzz sequence with parameters", slog.Any("params", params))
+
 	result, err := a.generator.Generate(params)
 	if err != nil {
 		writeError(w, err)

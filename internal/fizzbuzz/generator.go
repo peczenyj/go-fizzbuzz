@@ -14,7 +14,9 @@ type Generator struct {
 }
 
 // DefaultGenerator returns a Generator allowing up to 1024 elements and
-// 64-byte labels, i.e. responses of roughly 1024 × 128 bytes at most.
+// 64-byte labels: at most 1024 × 128 bytes of labels. JSON escaping can
+// expand each byte up to 6× (e.g. "<" → "\u003c"), so the largest response
+// is about 790 KB (measured: 789 506 bytes).
 func DefaultGenerator() *Generator {
 	return &Generator{
 		maxLimit:        defaultFizzBuzzMaxLimit,
@@ -23,7 +25,9 @@ func DefaultGenerator() *Generator {
 }
 
 // Hard ceilings for any Generator. Worst case per call:
-// maxLimitThreshold × 2 × maxStringLengthThreshold ≈ 100 000 × 510 B ≈ 51 MB.
+// maxLimitThreshold × 2 × maxStringLengthThreshold ≈ 100 000 × 510 B ≈ 51 MB
+// of labels in memory; once JSON-encoded (up to 6× for escaped bytes), the
+// response can reach ≈ 300 MB.
 const (
 	maxLimitThreshold        = 100_000
 	maxStringLengthThreshold = 255
