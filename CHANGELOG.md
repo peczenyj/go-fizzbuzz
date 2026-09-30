@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-30
+
 ### Added
 
 - `GET /statistics`: the most frequent successful `/fizzbuzz` request and its
@@ -27,5 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Makefile, golangci-lint v2, govulncheck, GitHub Actions CI with Docker smoke test.
 - Distroless Docker image, published to GHCR on version tags.
 
-[Unreleased]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/peczenyj/go-fizzbuzz/releases/tag/v0.1.0

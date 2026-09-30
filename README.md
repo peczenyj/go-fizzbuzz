@@ -122,7 +122,7 @@ Before any successful request, it returns `{"params":null,"hits":0}`: same statu
 
 What counts as a hit:
 
-- **Only successful requests.** A request rejected with `400` or failing with `500` is not counted.
+- **Only successful requests.** A request rejected with `400`, failing with `500`, or whose response couldn't be delivered is not counted.
 - **`GET` and `HEAD`.** A `HEAD /fizzbuzz` does the same work as a `GET`, without the body, so it counts as a hit too.
 - **The same request, however it is written.** Parameters are compared after decoding, so `int1=3&int2=5&…` and `int2=5&int1=3&…` are the same request, and so are `str1=fizz` and `str1=%66izz`.
 - **Ties:** when two requests have the same number of hits, the first one to reach that count is reported.
@@ -138,7 +138,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 - **JSON array output.** Quoting separates values without ambiguity: `str1=a,b` can't be read as two elements. HTML-sensitive characters are escaped.
 - **Strict input.** Every parameter is required. Values that are missing, not integers, or out of range are rejected with a `400` that names the field. There are no silent defaults.
 - **Bounded input.** By default, `limit ≤ 1024` and `str1`/`str2` ≤ 64 bytes, to keep response size under control and avoid a denial-of-service risk.
-  - The limits apply to input bytes. JSON escaping can expand one byte up to 6× (`<` → `<`; control characters → `\u0001`), so the worst-case response is about 790 KB.
+  - The limits apply to input bytes. JSON escaping can expand one byte up to 6× (`<` → `\u003c`; control characters → `\u0001`), so the worst-case response is about 790 KB.
   - I measured it at 789,506 bytes, with `int1=1&int2=1&limit=1024` and 64 × `%01` in both strings.
   - The limits belong to `fizzbuzz.Generator` and can't exceed hard ceilings: 100,000 elements and 255 bytes.
 - **The domain is separate from HTTP.**
@@ -146,10 +146,11 @@ To keep the server production-ready and easy to maintain, I made the following c
   - `internal/api` translates between HTTP and the domain. It depends on two small interfaces, `Generator` and `Statistics`, defined where they are used, so tests can replace them with fakes.
 - **Statistics as a generic counter.** `internal/stats` provides `Counter[K comparable]`, a mutex-protected map that knows nothing about fizzbuzz. It is used with `fizzbuzz.Params` as the key, which is comparable because it has only `int` and `string` fields.
   - Counts only ever increase, so the top can change only on the key just incremented. `Record` and `Top` are O(1): there is no scan and no sort.
-  - Only successful requests are recorded, after generation, so invalid requests can't make themselves the most frequent.
+  - Only successful requests are recorded, after the response is written, so invalid requests can't make themselves the most frequent, and a response that never reached the client doesn't count.
 - **Typed errors.** `ParamError{Field, Err}` wraps sentinel errors. The API maps it to a `400` with `errors.As`, and tests match reasons with `errors.Is`.
 - **A hardened HTTP server.** It sets read, header, write and idle timeouts, limits headers to 16 KiB, and shuts down gracefully with a timeout.
 - **Minimal container.** A multi-stage build produces a static binary on distroless `nonroot`, with OCI labels for version and revision.
+  - Why a container: it's the unit Kubernetes and most platforms deploy, so the same image tested by CI's smoke test runs locally and in production, with `/healthz` ready for the probes.
 
 ## Project layout
 
@@ -185,7 +186,7 @@ $ make help
   - `FuzzParseParams` checks that any query string yields only the documented parse errors.
   - Run `make fuzz FUZZTIME=10s`.
 - **Linting:** `golangci-lint` v2, configured in `.golangci.yml`. It also requires doc comments on exported identifiers.
-- **CI (GitHub Actions)** runs on every push and pull request:
+- **CI (GitHub Actions)** runs on pushes to `main` and `devel`, on version tags, and on pull requests:
   - lint
   - tests on the two supported Go releases, with coverage
   - `govulncheck`
@@ -229,4 +230,8 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 ## How I worked
 
-I wrote the code myself, and used an AI assistant for code reviews.
+I wrote the code myself, and used an AI assistant for code reviews (via Claude Code).
+
+I started with a simple approach: default http server, generate the fizzbuzz sequence using a function, implicit defaults when a query parameter is missing. The first problem that I identify is the size of the fizzbuzz sequence, it can be huge depending on the parameters and this can use a lot of resources without needed. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I start to refactor the internal code until reach the current design.
+
+There are room for improvements, but I decided to wait for feedback instead just implement everything. Also there are several third party libraries that can be used to reduce the amount of code that I wrote like [validator](https://github.com/go-playground/validator), [gorilla schema](https://github.com/gorilla/schema), [testify](https://github.com/stretchr/testify), [go-json](https://github.com/goccy/go-json) and much more.

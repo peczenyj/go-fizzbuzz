@@ -30,7 +30,7 @@ ARG VERSION=dev
 ARG REVISION=unknown
 ARG CREATED
 LABEL org.opencontainers.image.title="go-fizzbuzz" \
-      org.opencontainers.image.description="Basic fizz-buzz REST API" \
+      org.opencontainers.image.description="Configurable fizz-buzz REST API with request statistics" \
       org.opencontainers.image.source="https://github.com/peczenyj/go-fizzbuzz" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="${VERSION}" \
