@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/loadtest.sh` and load-test results for v0.1.0 in the README.
+
 ## [0.1.0] - 2026-09-30
 
 ### Added

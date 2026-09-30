@@ -13,6 +13,7 @@ $ curl -s "localhost:8080/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz"
 - [Design decisions](#design-decisions)
 - [Project layout](#project-layout)
 - [Development](#development)
+- [Performance](#performance)
 - [Limitations and next steps](#limitations-and-next-steps)
 - [How I worked](#how-i-worked)
 
@@ -137,6 +138,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 cmd/server/          entry point: HTTP server, signals, graceful shutdown
 internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
 internal/api/        HTTP layer: routes, handlers, JSON responses
+scripts/loadtest.sh  load test with hey (see Performance)
 .github/workflows/   CI: lint, test, vulncheck, Docker smoke test, publish on tags
 ```
 
@@ -169,6 +171,30 @@ $ make help
   - `govulncheck`
   - a Docker build, then a `curl` smoke test against the running container
 - **Releases:** tags `v*` publish the image to GHCR. Dependabot keeps the GitHub Actions up to date.
+
+## Performance
+
+These are indicative numbers from a laptop, not a benchmark. I ran `scripts/loadtest.sh` ([hey](https://github.com/rakyll/hey), 50 connections, 30 s per scenario) against the released image:
+
+```console
+$ docker run --rm --cpus=2 -p 8080:8080 ghcr.io/peczenyj/go-fizzbuzz:v0.1.0
+$ scripts/loadtest.sh
+```
+
+Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Intel i7-1185G7, 8 CPUs) using the remaining cores.
+
+| Scenario | Req/s | p50 | p95 | p99 | Status |
+|---|---:|---:|---:|---:|---|
+| healthz | 62695 | 0.7 ms | 1.5 ms | 2.0 ms | 200 |
+| classic 1..100 | 35329 | 1.3 ms | 3.0 ms | 4.0 ms | 200 |
+| max limit 1024 | 14516 | 3.1 ms | 7.7 ms | 9.9 ms | 200 |
+| worst case (~790 KB) | 1504 | 32.5 ms | 51.9 ms | 74.9 ms | 200 |
+| invalid (400) | 41268 | 1.1 ms | 2.5 ms | 3.3 ms | 400 |
+
+- **Normal requests:** sub-millisecond medians, and p99 under 10 ms even at `limit=1024`.
+- **Invalid requests** are cheaper than valid ones, because they are rejected before any generation.
+- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 75 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
+- `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
 ## Limitations and next steps
 
