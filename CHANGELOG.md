@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- OpenAPI 3.1 description of the API in `api/openapi.yaml`, linted in CI
+  with Redocly CLI (`make openapi`).
+
 ### Fixed
 
 - Invalid `FIZZBUZZ_*` environment variables are all reported at startup,

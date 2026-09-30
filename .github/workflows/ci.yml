@@ -29,6 +29,9 @@ jobs:
         with:
           version: v2.12.2
 
+      - name: OpenAPI lint
+        run: make openapi
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
