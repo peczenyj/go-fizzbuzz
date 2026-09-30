@@ -59,16 +59,20 @@ func Default() Config {
 
 // Parse reads args (without the program name), using getenv for defaults.
 // Errors and usage are written to output. It returns flag.ErrHelp for -h,
-// and an error wrapping ErrInvalid for an invalid value; every invalid value
-// is reported, not just the first one. With -version, the other values are
-// not validated.
+// and an error wrapping ErrInvalid for an invalid value. With -version, the
+// other values are not validated.
+//
+// Every invalid environment variable is reported, even when a flag replaces
+// it. Flag parsing stops at an invalid flag or at the first argument, and
+// the flag values are then left unchecked, since the flags after that point
+// could have replaced them; otherwise every invalid flag value is reported.
 //
 // MaxLimit and MaxStringLength are only parsed here: their bounds belong to
 // fizzbuzz.NewGenerator.
 func Parse(name string, args []string, getenv func(string) string, output io.Writer) (Config, error) {
 	cfg := Default()
 
-	errs := []error{cfg.readEnv(getenv)}
+	envErr := cfg.readEnv(getenv)
 
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -81,32 +85,31 @@ func Parse(name string, args []string, getenv func(string) string, output io.Wri
 	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "grace period for in-flight requests on shutdown (env "+EnvShutdownTimeout+")")
 	fs.BoolVar(&cfg.ShowVersion, "version", false, "print the version and exit")
 
-	// flag reports its own error and the usage, so flagErr is only returned.
-	var flagErr error
-
-	switch err := fs.Parse(args); {
-	case errors.Is(err, flag.ErrHelp):
-		return Config{}, err
-	case err != nil:
-		// The flags after the invalid one are not parsed: validating cfg
-		// could reject values those flags would have replaced.
-		flagErr = fmt.Errorf("%w: %w", ErrInvalid, err)
-	case cfg.ShowVersion:
-		return cfg, nil
-	default:
-		if fs.NArg() > 0 {
-			errs = append(errs, fmt.Errorf("%w: unexpected arguments %q", ErrInvalid, fs.Args()))
+	report := func(err error) error {
+		if err != nil {
+			fmt.Fprintf(output, "%s: %v\n", name, err)
 		}
 
-		errs = append(errs, cfg.validate())
+		return err
 	}
 
-	err := errors.Join(errs...)
-	if err != nil {
-		fmt.Fprintf(output, "%s: %v\n", name, err)
+	var err error
+
+	switch parseErr := fs.Parse(args); {
+	case errors.Is(parseErr, flag.ErrHelp):
+		return Config{}, parseErr
+	case parseErr != nil:
+		// flag has already reported parseErr and the usage.
+		return Config{}, errors.Join(fmt.Errorf("%w: %w", ErrInvalid, parseErr), report(envErr))
+	case cfg.ShowVersion:
+		return cfg, nil
+	case fs.NArg() > 0:
+		err = fmt.Errorf("%w: unexpected arguments %q", ErrInvalid, fs.Args())
+	default:
+		err = cfg.validate()
 	}
 
-	if err = errors.Join(flagErr, err); err != nil {
+	if err := report(errors.Join(envErr, err)); err != nil {
 		return Config{}, err
 	}
 
@@ -114,7 +117,8 @@ func Parse(name string, args []string, getenv func(string) string, output io.Wri
 }
 
 // readEnv overrides the defaults with the environment variables that are set.
-// It reports every invalid value, not just the first one.
+// It checks each value as validate does, and reports every invalid one; an
+// invalid value leaves the built-in default in place.
 func (c *Config) readEnv(getenv func(string) string) error {
 	var errs []error
 
@@ -126,12 +130,12 @@ func (c *Config) readEnv(getenv func(string) string) error {
 		}
 	}
 
-	parse(EnvAddr, func(v string) error { c.Addr = v; return nil })
+	parse(EnvAddr, setIfValid(&c.Addr, checked(asString, checkAddr)))
 	parse(EnvLogLevel, setIfValid(&c.LogLevel, parseLevel))
-	parse(EnvLogFormat, func(v string) error { c.LogFormat = v; return nil })
+	parse(EnvLogFormat, setIfValid(&c.LogFormat, checked(asString, checkLogFormat)))
 	parse(EnvMaxLimit, setIfValid(&c.MaxLimit, strconv.Atoi))
 	parse(EnvMaxStringLength, setIfValid(&c.MaxStringLength, strconv.Atoi))
-	parse(EnvShutdownTimeout, setIfValid(&c.ShutdownTimeout, time.ParseDuration))
+	parse(EnvShutdownTimeout, setIfValid(&c.ShutdownTimeout, checked(time.ParseDuration, checkShutdownTimeout)))
 
 	return errors.Join(errs...)
 }
@@ -149,6 +153,21 @@ func setIfValid[T any](dst *T, parse func(string) (T, error)) func(string) error
 	}
 }
 
+// checked returns parse followed by check, for a value that must parse and
+// then pass check.
+func checked[T any](parse func(string) (T, error), check func(T) error) func(string) (T, error) {
+	return func(v string) (T, error) {
+		x, err := parse(v)
+		if err == nil {
+			err = check(x)
+		}
+
+		return x, err
+	}
+}
+
+func asString(v string) (string, error) { return v, nil }
+
 // parseLevel parses a log level name, such as "debug" or "warn".
 func parseLevel(v string) (level slog.Level, err error) {
 	err = level.UnmarshalText([]byte(v))
@@ -156,21 +175,43 @@ func parseLevel(v string) (level slog.Level, err error) {
 	return level, err
 }
 
+func checkAddr(addr string) error {
+	_, _, err := net.SplitHostPort(addr)
+
+	return err
+}
+
+func checkLogFormat(format string) error {
+	if format != LogFormatText && format != LogFormatJSON {
+		return fmt.Errorf("must be %q or %q", LogFormatText, LogFormatJSON)
+	}
+
+	return nil
+}
+
+func checkShutdownTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return errors.New("must be positive")
+	}
+
+	return nil
+}
+
 // validate checks the values that parsing alone cannot. It reports every
 // invalid value, not just the first one.
 func (c *Config) validate() error {
 	var errs []error
 
-	if _, _, err := net.SplitHostPort(c.Addr); err != nil {
+	if err := checkAddr(c.Addr); err != nil {
 		errs = append(errs, fmt.Errorf("%w: addr %q: %w", ErrInvalid, c.Addr, err))
 	}
 
-	if c.LogFormat != LogFormatText && c.LogFormat != LogFormatJSON {
-		errs = append(errs, fmt.Errorf("%w: log format %q: must be %q or %q", ErrInvalid, c.LogFormat, LogFormatText, LogFormatJSON))
+	if err := checkLogFormat(c.LogFormat); err != nil {
+		errs = append(errs, fmt.Errorf("%w: log format %q: %w", ErrInvalid, c.LogFormat, err))
 	}
 
-	if c.ShutdownTimeout <= 0 {
-		errs = append(errs, fmt.Errorf("%w: shutdown timeout %v: must be positive", ErrInvalid, c.ShutdownTimeout))
+	if err := checkShutdownTimeout(c.ShutdownTimeout); err != nil {
+		errs = append(errs, fmt.Errorf("%w: shutdown timeout %v: %w", ErrInvalid, c.ShutdownTimeout, err))
 	}
 
 	return errors.Join(errs...)

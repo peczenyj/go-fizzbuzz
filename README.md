@@ -86,7 +86,7 @@ $ docker run --rm ghcr.io/peczenyj/go-fizzbuzz:latest -version
 go-fizzbuzz v0.3.0 (revision …)
 ```
 
-- **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Every invalid environment variable is reported at once.
+- **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Each environment variable is checked like its flag, even when a flag replaces it, and every invalid one is reported at once, together with an invalid flag or unexpected arguments. Parsing stops at the first invalid flag or argument, so the flag values before it are only checked once it is fixed.
 - **The limits are validated by `fizzbuzz.NewGenerator`**, which owns the hard ceilings, so the configuration doesn't duplicate the domain rules.
 - `-h` lists every flag with its environment variable and default:
 
@@ -302,7 +302,7 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 ## How I worked
 
-I wrote the code myself, and used an AI assistant for code reviews (via Claude Code).
+I wrote the core myself (API, domain, statistics, tests) and used Claude Code for reviews; the benchmarks and the configuration package were implemented by Claude Code under my direction and reviewed by me.
 
 I started with a simple approach: the default HTTP server, a function generating the fizzbuzz sequence, and implicit defaults when a query parameter was missing. The first problem I identified was the size of the fizzbuzz sequence: it can be huge depending on the parameters, and it can use a lot of resources unnecessarily. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I started refactoring the internal code until I reached the current design.
 
