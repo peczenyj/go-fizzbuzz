@@ -201,23 +201,25 @@ $ make help
 These are indicative numbers from a laptop, not a benchmark. I ran `scripts/loadtest.sh` ([hey](https://github.com/rakyll/hey), 50 connections, 30 s per scenario) against the released image:
 
 ```console
-$ docker run --rm --cpus=2 -p 8080:8080 ghcr.io/peczenyj/go-fizzbuzz:v0.1.0
+$ docker run --rm --cpus=2 -p 8080:8080 ghcr.io/peczenyj/go-fizzbuzz:v0.2.0
 $ scripts/loadtest.sh
 ```
 
-Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Intel i7-1185G7, 8 CPUs) using the remaining cores.
+Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Intel i7-1185G7, 8 CPUs) using the remaining cores.
 
-| Scenario | Req/s | p50 | p95 | p99 | Status |
-|---|---:|---:|---:|---:|---|
-| healthz | 62695 | 0.7 ms | 1.5 ms | 2.0 ms | 200 |
-| classic 1..100 | 35329 | 1.3 ms | 3.0 ms | 4.0 ms | 200 |
-| max limit 1024 | 14516 | 3.1 ms | 7.7 ms | 9.9 ms | 200 |
-| worst case (~790 KB) | 1504 | 32.5 ms | 51.9 ms | 74.9 ms | 200 |
-| invalid (400) | 41268 | 1.1 ms | 2.5 ms | 3.3 ms | 400 |
+| Scenario | Req/s | p50 | p95 | p99 | Status | Req/s in v0.1.0 |
+|---|---:|---:|---:|---:|---|---:|
+| healthz | 60060 | 0.6 ms | 1.7 ms | 2.5 ms | 200 | 62695 |
+| classic 1..100 | 38964 | 1.2 ms | 2.7 ms | 3.4 ms | 200 | 35329 |
+| max limit 1024 | 15542 | 2.9 ms | 7.3 ms | 9.0 ms | 200 | 14516 |
+| worst case (~790 KB) | 1495 | 32.7 ms | 51.8 ms | 73.4 ms | 200 | 1504 |
+| invalid (400) | 41352 | 1.1 ms | 2.5 ms | 3.3 ms | 400 | 41268 |
+| statistics | 45851 | 1.0 ms | 2.2 ms | 2.9 ms | 200 | — |
 
 - **Normal requests:** sub-millisecond medians, and p99 under 10 ms even at `limit=1024`.
 - **Invalid requests** are cheaper than valid ones, because they are rejected before any generation.
-- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 75 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
+- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 73 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
+- **Recording statistics has no measurable cost.** Every scenario is within run-to-run variation of v0.1.0, which had no statistics (both directions: `healthz` is 4% slower, `classic` 10% faster). `/statistics` itself answers at about 46,000 requests per second.
 - `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
 ### Benchmarks
@@ -237,7 +239,7 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 - **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: escaping 790 KB of output takes about 800 µs. A faster encoder or streaming would be the next optimization, not the generator.
 - **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slice and the `str1str2` label. With only labels, it's 2 allocations whatever the size.
-- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), roughly 300× the measured `/fizzbuzz` rate of about 35,000 requests per second on 2 CPUs.
+- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), nearly 300× the measured `/fizzbuzz` rate of about 39,000 requests per second on 2 CPUs.
 
 ## Limitations and next steps
 
@@ -254,6 +256,6 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 I wrote the code myself, and used an AI assistant for code reviews (via Claude Code).
 
-I started with a simple approach: default http server, generate the fizzbuzz sequence using a function, implicit defaults when a query parameter is missing. The first problem that I identify is the size of the fizzbuzz sequence, it can be huge depending on the parameters and this can use a lot of resources without needed. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I start to refactor the internal code until reach the current design.
+I started with a simple approach: the default HTTP server, a function generating the fizzbuzz sequence, and implicit defaults when a query parameter was missing. The first problem I identified was the size of the fizzbuzz sequence: it can be huge depending on the parameters, and it can use a lot of resources unnecessarily. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I started refactoring the internal code until I reached the current design.
 
-There are room for improvements, but I decided to wait for feedback instead just implement everything. Also there are several third party libraries that can be used to reduce the amount of code that I wrote like [validator](https://github.com/go-playground/validator), [gorilla schema](https://github.com/gorilla/schema), [testify](https://github.com/stretchr/testify), [go-json](https://github.com/goccy/go-json) and much more.
+There is room for improvement, but I decided to wait for feedback instead of implementing everything. There are also several third-party libraries that could reduce the amount of code I wrote, like [validator](https://github.com/go-playground/validator), [gorilla schema](https://github.com/gorilla/schema), [testify](https://github.com/stretchr/testify), [go-json](https://github.com/goccy/go-json) and many more.
