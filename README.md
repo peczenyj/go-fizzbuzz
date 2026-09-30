@@ -83,7 +83,7 @@ Every setting is a command-line flag whose default comes from an environment var
 $ go run ./cmd/server -log-level=debug -max-limit=100
 $ docker run --rm -p 8080:8080 -e FIZZBUZZ_LOG_FORMAT=json ghcr.io/peczenyj/go-fizzbuzz:latest
 $ docker run --rm ghcr.io/peczenyj/go-fizzbuzz:latest -version
-go-fizzbuzz v0.3.0 (revision …)
+go-fizzbuzz v0.3.1 (revision …)
 ```
 
 - **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Each environment variable is checked like its flag, even when a flag replaces it, and every invalid one is reported at once, together with an invalid flag or unexpected arguments. Parsing stops at the first invalid flag or argument, so the flag values before it are only checked once it is fixed.
