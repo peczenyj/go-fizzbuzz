@@ -16,9 +16,14 @@ import (
 )
 
 const (
+	defaultListenerAddress = `:8080`
+
 	defaultShutdownTimeout   = 10 * time.Second
-	defaultReadHeaderTimeout = 10 * time.Second
-	defaultListenerAddress   = `:8080`
+	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 10 * time.Second
+	defaultWriteTimeout      = 10 * time.Second
+	defaultIdleTimeout       = 120 * time.Second
+	defaultMaxHeaderBytes    = 16 << 10 // 16 KiB
 )
 
 var (
@@ -47,15 +52,24 @@ func MainWithExitCode(ctx context.Context) int {
 	return 0
 }
 
+var errServerStopped = errors.New("server stopped")
+
 // RunServer start an http server and register the api handler.
 func RunServer(ctx context.Context) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(errServerStopped)
+
 	server := &http.Server{
 		Addr:              defaultListenerAddress,
 		Handler:           api.New(fizzbuzz.DefaultGenerator()),
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		ReadTimeout:       defaultReadTimeout,
+		WriteTimeout:      defaultWriteTimeout,
+		IdleTimeout:       defaultIdleTimeout,
+		MaxHeaderBytes:    defaultMaxHeaderBytes,
 	}
 
-	done := make(chan error)
+	done := make(chan error, 1)
 
 	go prepareServerShutdown(ctx, server, done)
 
@@ -76,7 +90,9 @@ func prepareServerShutdown(ctx context.Context, server *http.Server, done chan e
 
 	<-ctx.Done()
 
-	slog.Info("closing server", slog.Any("cause", context.Cause(ctx)))
+	if cause := context.Cause(ctx); !errors.Is(cause, errServerStopped) {
+		slog.Info("closing server", slog.Any("cause", cause))
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
 	defer shutdownCancel()
