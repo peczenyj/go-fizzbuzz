@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GET /statistics`: the most frequent successful `/fizzbuzz` request and its
+  number of hits. Only successful `GET` and `HEAD` requests count; parameters are
+  compared after decoding; ties go to the first request to reach the count.
+- `internal/stats`: generic concurrency-safe counter with O(1) top.
 - `scripts/loadtest.sh` and load-test results for v0.1.0 in the README.
 
 ## [0.1.0] - 2026-09-30

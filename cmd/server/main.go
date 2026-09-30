@@ -13,6 +13,7 @@ import (
 
 	"github.com/peczenyj/go-fizzbuzz/internal/api"
 	"github.com/peczenyj/go-fizzbuzz/internal/fizzbuzz"
+	"github.com/peczenyj/go-fizzbuzz/internal/stats"
 )
 
 const (
@@ -61,7 +62,7 @@ func RunServer(ctx context.Context) error {
 
 	server := &http.Server{
 		Addr:              defaultListenerAddress,
-		Handler:           api.New(fizzbuzz.DefaultGenerator(), fizzbuzz.DefaultStatistics()),
+		Handler:           api.New(fizzbuzz.DefaultGenerator(), stats.NewCounter[fizzbuzz.Params]()),
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
 		ReadTimeout:       defaultReadTimeout,
 		WriteTimeout:      defaultWriteTimeout,

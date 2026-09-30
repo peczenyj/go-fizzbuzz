@@ -11,7 +11,7 @@ type Counter[K comparable] struct {
 	topHits int
 }
 
-// NewCounter ctor.
+// NewCounter returns an empty Counter.
 func NewCounter[K comparable]() *Counter[K] {
 	return &Counter[K]{counts: map[K]int{}}
 }

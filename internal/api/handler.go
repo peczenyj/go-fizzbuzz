@@ -42,7 +42,7 @@ type API struct {
 	statistics Statistics
 }
 
-// New returns an API serving /healthz and /fizzbuzz with gen.
+// New returns an API serving /healthz, /fizzbuzz and /statistics with the given arguments.
 // It panics if gen or st is nil: that is a wiring bug, not a runtime condition.
 func New(gen Generator, st Statistics) *API {
 	if gen == nil {
@@ -110,12 +110,6 @@ type StatisticsBody struct {
 }
 
 func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
-	// if r.Method != http.MethodGet {
-	// 	w.WriteHeader(http.StatusOK)
-
-	// 	return
-	// }
-
 	if r.URL.RawQuery != "" {
 		writeJSON(w, http.StatusBadRequest, &ErrorBody{Error: "unexpected parameter"})
 

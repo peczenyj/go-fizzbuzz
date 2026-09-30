@@ -80,6 +80,12 @@ func (m *statisticsMock) Top() (p fizzbuzz.Params, hits int, ok bool) {
 	return m.topResponse.p, m.topResponse.hits, m.topResponse.ok
 }
 
+func returnTopStatistics(p fizzbuzz.Params, hits int, ok bool) api.Statistics {
+	return &statisticsMock{
+		topResponse: topResponse{p: p, hits: hits, ok: ok},
+	}
+}
+
 // expectRecords returns a statisticsMock builder that checks, when the test
 // ends, that exactly want was recorded (nothing, if want is empty).
 func expectRecords(want ...fizzbuzz.Params) func(*testing.T) api.Statistics {

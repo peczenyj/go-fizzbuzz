@@ -39,6 +39,9 @@ func TestCounter_multiple_hits(t *testing.T) {
 	assertStatsTop(t, c, "x", 3, true)
 
 	c.Record("y")
+
+	assertStatsTop(t, c, "x", 3, true)
+
 	c.Record("y")
 
 	assertStatsTop(t, c, "y", 4, true)

@@ -111,7 +111,23 @@ Returns `200 OK` with an empty body. Kubernetes can use it for both liveness and
 
 ### `GET /statistics`
 
-Not implemented yet; planned for the next release. See [Limitations and next steps](#limitations-and-next-steps).
+Returns the most frequent successful `/fizzbuzz` request and its number of hits.
+
+```console
+$ curl -s localhost:8080/statistics
+{"params":{"int1":3,"int2":5,"limit":15,"str1":"fizz","str2":"buzz"},"hits":2}
+```
+
+Before any successful request, it returns `{"params":null,"hits":0}`: same status, same shape, so clients always parse one format.
+
+What counts as a hit:
+
+- **Only successful requests.** A request rejected with `400` or failing with `500` is not counted.
+- **`GET` and `HEAD`.** A `HEAD /fizzbuzz` does the same work as a `GET`, without the body, so it counts as a hit too.
+- **The same request, however it is written.** Parameters are compared after decoding, so `int1=3&int2=5&…` and `int2=5&int1=3&…` are the same request, and so are `str1=fizz` and `str1=%66izz`.
+- **Ties:** when two requests have the same number of hits, the first one to reach that count is reported.
+
+The endpoint accepts no parameter: any query string returns `400` with `{"error":"unexpected parameter"}`. `HEAD` is accepted, and other methods return `405`.
 
 ## Design decisions
 
@@ -127,7 +143,10 @@ To keep the server production-ready and easy to maintain, I made the following c
   - The limits belong to `fizzbuzz.Generator` and can't exceed hard ceilings: 100,000 elements and 255 bytes.
 - **The domain is separate from HTTP.**
   - `internal/fizzbuzz` holds the rules: parsing (`Params.Parse`), validation, and generation. It depends on a minimal `QueryValues` interface (`url.Values` satisfies it), not on `net/http`.
-  - `internal/api` translates between HTTP and the domain. It depends on a small `Generator` interface, so tests can replace it with a fake.
+  - `internal/api` translates between HTTP and the domain. It depends on two small interfaces, `Generator` and `Statistics`, defined where they are used, so tests can replace them with fakes.
+- **Statistics as a generic counter.** `internal/stats` provides `Counter[K comparable]`, a mutex-protected map that knows nothing about fizzbuzz. It is used with `fizzbuzz.Params` as the key, which is comparable because it has only `int` and `string` fields.
+  - Counts only ever increase, so the top can change only on the key just incremented. `Record` and `Top` are O(1): there is no scan and no sort.
+  - Only successful requests are recorded, after generation, so invalid requests can't make themselves the most frequent.
 - **Typed errors.** `ParamError{Field, Err}` wraps sentinel errors. The API maps it to a `400` with `errors.As`, and tests match reasons with `errors.Is`.
 - **A hardened HTTP server.** It sets read, header, write and idle timeouts, limits headers to 16 KiB, and shuts down gracefully with a timeout.
 - **Minimal container.** A multi-stage build produces a static binary on distroless `nonroot`, with OCI labels for version and revision.
@@ -138,6 +157,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 cmd/server/          entry point: HTTP server, signals, graceful shutdown
 internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
 internal/api/        HTTP layer: routes, handlers, JSON responses
+internal/stats/      generic concurrency-safe counter with O(1) top
 scripts/loadtest.sh  load test with hey (see Performance)
 .github/workflows/   CI: lint, test, vulncheck, Docker smoke test, publish on tags
 ```
@@ -198,9 +218,10 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 ## Limitations and next steps
 
-- **`/statistics`** (the bonus) is next. The plan is a generic, concurrency-safe counter that tracks the most frequent key in O(1), and records only successful requests.
-  - The counts will be in memory, so they are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis `ZINCRBY` / `ZREVRANGE … WITHSCORES`.
-  - Every distinct request adds a key. To bound memory, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries).
+- **Statistics are in memory and per instance.** They are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis: `ZINCRBY` on each request, `ZREVRANGE … 0 0 WITHSCORES` for the top.
+- **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests grows the map for as long as the process runs. To bound it, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries) that finds the most frequent items in fixed memory.
+- **One lock for all requests.** Every successful request takes the counter's mutex. The critical section is a map increment, so this is fine at this scale; if profiling ever shows contention, shard the counter.
+- **Statistics can't be disabled.** Next: a `-statistics=false` flag that removes the `/statistics` route and stops recording, rather than serving an empty result.
 - **Configuration.** The listen address and limits are constants today. Next: environment variables for the address, log level and format, and the `limit`/string maximums, validated at startup.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
 - **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
