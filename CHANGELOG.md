@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   number of hits. Only successful `GET` and `HEAD` requests count; parameters are
   compared after decoding; ties go to the first request to reach the count.
 - `internal/stats`: generic concurrency-safe counter with O(1) top.
+- Go benchmarks (`make bench`) for generation, the handler and the counter, with results in the README.
 - `scripts/loadtest.sh` and load-test results for v0.1.0 in the README.
 
 ## [0.1.0] - 2026-09-30

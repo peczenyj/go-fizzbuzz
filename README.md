@@ -173,6 +173,7 @@ $ make help
   test     Run all tests with the race detector
   cover    Run tests with a coverage summary
   fuzz     Fuzz each target for FUZZTIME (default 30s)
+  bench    Run benchmarks with allocation stats
   lint     go vet + golangci-lint
   fmt      Format the code
   tidy     go mod tidy + verify
@@ -185,11 +186,13 @@ $ make help
   - `FuzzGenerate` checks that the output has `limit` elements, each one correct, or that the error is a `ParamError`.
   - `FuzzParseParams` checks that any query string yields only the documented parse errors.
   - Run `make fuzz FUZZTIME=10s`.
+- **Benchmarks:** `make bench` runs `testing.B` benchmarks for generation, the full handler and the statistics counter, with allocation stats. Results are under [Performance](#performance).
 - **Linting:** `golangci-lint` v2, configured in `.golangci.yml`. It also requires doc comments on exported identifiers.
 - **CI (GitHub Actions)** runs on pushes to `main` and `devel`, on version tags, and on pull requests:
   - lint
   - tests on the two supported Go releases, with coverage
   - `govulncheck`
+  - each benchmark once, so they keep compiling and running (numbers from shared runners are too noisy to compare)
   - a Docker build, then a `curl` smoke test against the running container
 - **Releases:** tags `v*` publish the image to GHCR. Dependabot keeps the GitHub Actions up to date.
 
@@ -217,11 +220,30 @@ Setup: v0.1.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 - **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 75 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
 - `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
+### Benchmarks
+
+`make bench` isolates the code from the HTTP stack and the network. These are medians of 5 runs (`-count=5`) on the same laptop, Go 1.27, so again indicative only.
+
+| Benchmark | Time/op | Memory/op | Allocs/op |
+|---|---:|---:|---:|
+| `Generate` classic 1..100 | 0.70 µs | 1.8 KB | 2 |
+| `Generate` limit 1024 | 11.8 µs | 20 KB | 496 |
+| `Generate` limit 1024, 64-byte labels | 6.5 µs | 18.6 KB | 2 |
+| handler classic 1..100 | 5.0 µs | 2.5 KB | 14 |
+| handler limit 1024 | 42.5 µs | 20.8 KB | 508 |
+| handler worst case (~790 KB) | 815 µs | 20–32 KB | 16 |
+| `Counter.Record`, 1 goroutine | 30 ns | 0 | 0 |
+| `Counter.Record`, 8 goroutines | 88 ns | 0 | 0 |
+
+- **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: escaping 790 KB of output takes about 800 µs. A faster encoder or streaming would be the next optimization, not the generator.
+- **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slice and the `str1str2` label. With only labels, it's 2 allocations whatever the size.
+- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), roughly 300× the measured `/fizzbuzz` rate of about 35,000 requests per second on 2 CPUs.
+
 ## Limitations and next steps
 
 - **Statistics are in memory and per instance.** They are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis: `ZINCRBY` on each request, `ZREVRANGE … 0 0 WITHSCORES` for the top.
 - **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests grows the map for as long as the process runs. To bound it, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries) that finds the most frequent items in fixed memory.
-- **One lock for all requests.** Every successful request takes the counter's mutex. The critical section is a map increment, so this is fine at this scale; if profiling ever shows contention, shard the counter.
+- **One lock for all requests.** Every successful request takes the counter's mutex. The benchmark shows about 11 million records per second under 8-way contention, far above the request rate, so this is fine at this scale; if profiling ever shows contention, shard the counter.
 - **Statistics can't be disabled.** Next: a `-statistics=false` flag that removes the `/statistics` route and stops recording, rather than serving an empty result.
 - **Configuration.** The listen address and limits are constants today. Next: environment variables for the address, log level and format, and the `limit`/string maximums, validated at startup.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.

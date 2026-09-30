@@ -6,7 +6,7 @@ REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X main.version=$(VERSION) -X main.revision=$(REVISION)
 
 .DEFAULT_GOAL := help
-.PHONY: help build run test cover fuzz lint fmt tidy docker clean
+.PHONY: help build run test cover fuzz bench lint fmt tidy docker clean
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-8s %s\n",$$1,$$2}'
@@ -31,6 +31,9 @@ fuzz: ## Fuzz each target for FUZZTIME (default 30s)
 		echo "=== $$target"; \
 		$(GO) test ./internal/fizzbuzz -run='^$$' -fuzz="^$$target\$$" -fuzztime=$(FUZZTIME) || exit 1; \
 	done
+
+bench: ## Run benchmarks with allocation stats
+	$(GO) test -run='^$$' -bench=. -benchmem ./...
 
 lint: ## go vet + golangci-lint
 	$(GO) vet ./...

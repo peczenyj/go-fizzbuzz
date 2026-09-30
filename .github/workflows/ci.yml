@@ -51,6 +51,11 @@ jobs:
       - name: Test (race + coverage)
         run: go test -race -covermode=atomic -coverprofile=coverage.txt ./...
 
+      # One iteration each: keeps the benchmarks compiling and running.
+      # Numbers from shared runners are too noisy to compare.
+      - name: Benchmarks (smoke)
+        run: go test -run='^$' -bench=. -benchtime=1x ./...
+
       - name: Coverage summary
         run: go tool cover -func=coverage.txt | tail
 
