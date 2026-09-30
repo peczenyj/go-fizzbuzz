@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-30
+
+### Changed
+
+- CI pins every GitHub Action to a full commit SHA, updated by Dependabot,
+  and golangci-lint runs gosec.
+- Graceful shutdown derives its timeout context from the server context with
+  `context.WithoutCancel`, instead of `context.Background()`.
+- This release's tag also includes the 0.3.1 CHANGELOG and README updates,
+  which landed after the `v0.3.1` tag.
+
 ## [0.3.1] - 2026-09-30
 
 ### Added
@@ -61,7 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Makefile, golangci-lint v2, govulncheck, GitHub Actions CI with Docker smoke test.
 - Distroless Docker image, published to GHCR on version tags.
 
-[Unreleased]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/peczenyj/go-fizzbuzz/compare/v0.1.0...v0.2.0

@@ -137,7 +137,8 @@ func prepareServerShutdown(ctx context.Context, server *http.Server, timeout tim
 		logger.Info("closing server", slog.Any("cause", cause))
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
+	// ctx is already cancelled: keep its values, not its cancellation.
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
