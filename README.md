@@ -1,12 +1,26 @@
 # go-fizzbuzz
 
-A golang fizzbuzz implementation
+A configurable fizz-buzz REST API written in Go, using only the standard library.
+
+```console
+$ curl -s "localhost:8080/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz"
+["1","2","fizz","4","buzz","fizz","7","8","fizz","buzz","11","fizz","13","14","fizzbuzz"]
+```
+
+- [Objective](#objective)
+- [Quick start](#quick-start)
+- [API](#api)
+- [Design decisions](#design-decisions)
+- [Project layout](#project-layout)
+- [Development](#development)
+- [Limitations and next steps](#limitations-and-next-steps)
+- [How I worked](#how-i-worked)
 
 ## Objective
 
-The objective is to implement an http endpoint that returns the fizzbuzz sequence based on query parameters.
+Implement an HTTP endpoint that returns a fizz-buzz sequence built from query parameters.
 
-This is the original briefing, verbatim:
+The original brief, verbatim:
 
 ```text
 The original fizz-buzz consists in writing all numbers from 1 to 100, and just replacing all multiples of 3 by "fizz", all multiples of 5 by "buzz", and all multiples of 15 by "fizzbuzz".
@@ -27,62 +41,145 @@ This endpoint should:
 - Return the parameters corresponding to the most used request, as well as the number of hits for this request
 ```
 
-## Quick Start
+## Quick start
 
-To start the server we can execute `make run`:
+Requirements: Go 1.26 or later, or Docker.
 
 ```console
 $ make run
-go run ./cmd/server/main.go
-2026/09/28 11:50:53 INFO starting server, will listen to :8080
+go run ./cmd/server
+... INFO starting server, will listen and serve addr=:8080
 ```
 
-We can use curl to perform a quick http request:
+With Docker:
 
 ```console
-$ curl -s "http://127.0.0.1:8080/fizzbuzz?int1=3&int2=5&limit=100&str1=fizz&str2=buzz"
-["1","2","fizz","4","buzz","fizz","7","8","fizz","buzz","11","fizz","13","14","fizzbuzz","16","17","fizz","19","buzz","fizz","22","23","fizz","buzz","26","fizz","28","29","fizzbuzz","31","32","fizz","34","buzz","fizz","37","38","fizz","buzz","41","fizz","43","44","fizzbuzz","46","47","fizz","49","buzz","fizz","52","53","fizz","buzz","56","fizz","58","59","fizzbuzz","61","62","fizz","64","buzz","fizz","67","68","fizz","buzz","71","fizz","73","74","fizzbuzz","76","77","fizz","79","buzz","fizz","82","83","fizz","buzz","86","fizz","88","89","fizzbuzz","91","92","fizz","94","buzz","fizz","97","98","fizz","buzz"]
+$ docker build -t go-fizzbuzz .
+$ docker run --rm -p 8080:8080 go-fizzbuzz
 ```
 
-To create the docker image you can do:
+`make docker` builds the same image, tagged with `git describe` and carrying version labels.
 
-```console
-$ docker build . 
-```
+The server listens on `:8080` and stops gracefully on `SIGINT` or `SIGTERM`.
 
 ## API
 
-### the /fizzbuzz endpoint
+### `GET /fizzbuzz`
 
-This endpoint responds to HTTP verb GET only, it expect 5 parameters ( `int1`, `int2`, `limit`, `str1`, `str2` ) and will return a json response with the fizzbuzz sequence if the parameters are considered valid.
+Returns the sequence as a JSON array of strings.
 
-### the /healthz endpoint
+| Parameter | Type    | Rule                               |
+|-----------|---------|------------------------------------|
+| `int1`    | integer | required, `> 0`                    |
+| `int2`    | integer | required, `> 0`                    |
+| `limit`   | integer | required, `> 0`, `≤ 1024`          |
+| `str1`    | string  | required, not empty, `≤ 64` bytes  |
+| `str2`    | string  | required, not empty, `≤ 64` bytes  |
 
-This endpoint is used both readiness and liveness probes for kubernetes. Returns a simple HTTP 200 OK response.
+Numbers from 1 to `limit` are printed as-is, except:
 
-## the /metrics endpoint
+- multiples of both `int1` and `int2` → `str1str2`
+- multiples of `int1` only → `str1`
+- multiples of `int2` only → `str2`
 
-TBD
+`HEAD` is also accepted. Other methods return `405 Method Not Allowed` with an `Allow: GET, HEAD` header.
 
-## Design Decisions
+#### Errors
 
-In order to be easier to maintain by other developers and be ready to production I make the following decisions:
+An invalid request returns `400 Bad Request` with a JSON body. The body names the parameter and the reason, and reports the first error found:
 
-- This project must be coded by myself. But I may use AI to perform code reviews.
-- The golang standard library should be enough to implement the core features.
-- No premature optimizations. Correctness and bounded resources first.
-- Output will be a JSON array of strings: this format helps to escape the input strings and avoid any ambiguity.
-- Omitted or invalid values will be rejected.
-- Inputs are bounded (by default `limit ≤ 1024`, `str1`/`str2` ≤ 64 bytes) to keep the response size under control and avoid a denial of service risk. Limits apply to input bytes; JSON escaping can expand a byte up to 6× (`<` → `\u003c`, control characters → `\u0001`), so the worst-case response is about 790 KB. I measured it at 789,506 bytes (`int1=1&int2=1&limit=1024` with 64 × `%01` in both strings).
+```console
+$ curl -s "localhost:8080/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz"
+{"error":"invalid parameter","field":"str2","reason":"required"}
 
-## Limitations
+$ curl -s "localhost:8080/fizzbuzz?int1=x&int2=5&limit=15&str1=a&str2=b"
+{"error":"invalid parameter","field":"int1","reason":"must be an integer"}
 
-TBD
+$ curl -s "localhost:8080/fizzbuzz?int1=0&int2=5&limit=15&str1=a&str2=b"
+{"error":"invalid parameter","field":"int1","reason":"must be bigger than zero"}
+
+$ curl -s "localhost:8080/fizzbuzz?int1=3&int2=5&limit=5000&str1=a&str2=b"
+{"error":"invalid parameter","field":"limit","reason":"must not exceed max value 1024"}
+```
+
+Any other failure returns `500` with `{"error":"internal error"}`. Details are logged, never sent to the client.
+
+### `GET /healthz`
+
+Returns `200 OK` with an empty body. Kubernetes can use it for both liveness and readiness probes: the service has no dependencies, so "alive" and "ready" mean the same thing.
+
+### `GET /statistics`
+
+Not implemented yet; planned for the next release. See [Limitations and next steps](#limitations-and-next-steps).
+
+## Design decisions
+
+To keep the server production-ready and easy to maintain, I made the following choices:
+
+- **Standard library only.** `net/http` routing (method patterns, Go 1.22+), `encoding/json` and `log/slog` cover everything the brief needs. There are no runtime dependencies to audit or upgrade.
+- **No premature optimization.** Correctness and bounded resources come first.
+- **JSON array output.** Quoting separates values without ambiguity: `str1=a,b` can't be read as two elements. HTML-sensitive characters are escaped.
+- **Strict input.** Every parameter is required. Values that are missing, not integers, or out of range are rejected with a `400` that names the field. There are no silent defaults.
+- **Bounded input.** By default, `limit ≤ 1024` and `str1`/`str2` ≤ 64 bytes, to keep response size under control and avoid a denial-of-service risk.
+  - The limits apply to input bytes. JSON escaping can expand one byte up to 6× (`<` → `<`; control characters → `\u0001`), so the worst-case response is about 790 KB.
+  - I measured it at 789,506 bytes, with `int1=1&int2=1&limit=1024` and 64 × `%01` in both strings.
+  - The limits belong to `fizzbuzz.Generator` and can't exceed hard ceilings: 100,000 elements and 255 bytes.
+- **The domain is separate from HTTP.**
+  - `internal/fizzbuzz` holds the rules: parsing (`Params.Parse`), validation, and generation. It depends on a minimal `QueryValues` interface (`url.Values` satisfies it), not on `net/http`.
+  - `internal/api` translates between HTTP and the domain. It depends on a small `Generator` interface, so tests can replace it with a fake.
+- **Typed errors.** `ParamError{Field, Err}` wraps sentinel errors. The API maps it to a `400` with `errors.As`, and tests match reasons with `errors.Is`.
+- **A hardened HTTP server.** It sets read, header, write and idle timeouts, limits headers to 16 KiB, and shuts down gracefully with a timeout.
+- **Minimal container.** A multi-stage build produces a static binary on distroless `nonroot`, with OCI labels for version and revision.
+
+## Project layout
+
+```text
+cmd/server/          entry point: HTTP server, signals, graceful shutdown
+internal/fizzbuzz/   domain: Params, parsing, validation, Generator, errors
+internal/api/        HTTP layer: routes, handlers, JSON responses
+.github/workflows/   CI: lint, test, vulncheck, Docker smoke test, publish on tags
+```
 
 ## Development
 
-TBD
+```console
+$ make help
+  help     Show available targets
+  build    Build the server binary into bin/
+  run      Run the server locally
+  test     Run all tests with the race detector
+  cover    Run tests with a coverage summary
+  fuzz     Fuzz each target for FUZZTIME (default 30s)
+  lint     go vet + golangci-lint
+  fmt      Format the code
+  tidy     go mod tidy + verify
+  docker   Build the Docker image
+  clean    Remove build artefacts
+```
+
+- **Tests** are table-driven and use only the standard `testing` package. They cover parsing, validation, generation, routing (`404`, `405`, `HEAD`), error bodies, and a `500` path that must not leak the internal error.
+- **Fuzzing:**
+  - `FuzzGenerate` checks that the output has `limit` elements, each one correct, or that the error is a `ParamError`.
+  - `FuzzParseParams` checks that any query string yields only the documented parse errors.
+  - Run `make fuzz FUZZTIME=10s`.
+- **Linting:** `golangci-lint` v2, configured in `.golangci.yml`. It also requires doc comments on exported identifiers.
+- **CI (GitHub Actions)** runs on every push and pull request:
+  - lint
+  - tests on the two supported Go releases, with coverage
+  - `govulncheck`
+  - a Docker build, then a `curl` smoke test against the running container
+- **Releases:** tags `v*` publish the image to GHCR. Dependabot keeps the GitHub Actions up to date.
+
+## Limitations and next steps
+
+- **`/statistics`** (the bonus) is next. The plan is a generic, concurrency-safe counter that tracks the most frequent key in O(1), and records only successful requests.
+  - The counts will be in memory, so they are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis `ZINCRBY` / `ZREVRANGE … WITHSCORES`.
+  - Every distinct request adds a key. To bound memory, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries).
+- **Configuration.** The listen address and limits are constants today. Next: environment variables for the address, log level and format, and the `limit`/string maximums, validated at startup.
+- **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
+- **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
+- **Rate limiting.** I left it out of the service on purpose; I'd expect it at the ingress or API gateway.
 
 ## How I worked
 
-TBD
+I wrote the code myself, and used an AI assistant for code reviews.
