@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 
@@ -244,6 +245,8 @@ func TestFizzBuzzHandler(t *testing.T) {
 			target:        "/fizzbuzz?int2=5&limit=15&str1=fizz&str2=buzz",
 			errStatusCode: http.StatusBadRequest,
 			errBody:       &api.ErrorBody{Error: `invalid parameter`, Field: `int1`, Reason: `required`},
+			// a parse error, rejected before Generate: must not be recorded either
+			buildStatistics: expectRecords(),
 		},
 		{
 			label:         "should return error if int2 is missing",
@@ -357,8 +360,9 @@ func TestFizzBuzzHandler(t *testing.T) {
 					return nil, errors.New("ops")
 				})
 			},
-			errStatusCode: http.StatusInternalServerError,
-			errBody:       &api.ErrorBody{Error: `internal error`},
+			errStatusCode:   http.StatusInternalServerError,
+			errBody:         &api.ErrorBody{Error: `internal error`},
+			buildStatistics: expectRecords(),
 			verifyBody: func(t *testing.T, responseBody []byte) {
 				t.Helper()
 
@@ -524,19 +528,23 @@ func TestStatistics_counts_successful_fizzbuzz_requests(t *testing.T) {
 	t.Parallel()
 
 	fizzBuzzTargets := []struct {
+		method     string
 		target     string
 		statusCode int
 	}{
-		{"/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz", http.StatusOK},
-		{"/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz", http.StatusBadRequest},
-		{"/fizzbuzz?int1=4&int2=7&limit=100&str1=buzz&str2=fizz", http.StatusOK},
-		{"/fizzbuzz?int2=5&int1=3&limit=15&str1=fizz&str2=buzz", http.StatusOK},
-		{"/fizzbuzz?int1=4&int2=7&str1=buzz&str2=fizz&limit=100", http.StatusOK},
-		{"/fizzbuzz?int1=3&int2=5&str2=buzz&str1=fizz&limit=15", http.StatusOK},
-		{"/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
-		{"/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
-		{"/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
-		{"/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz", http.StatusOK},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=4&int2=7&limit=100&str1=buzz&str2=fizz", http.StatusOK},
+		{http.MethodGet, "/fizzbuzz?int2=5&int1=3&limit=15&str1=fizz&str2=buzz", http.StatusOK},
+		{http.MethodGet, "/fizzbuzz?int1=4&int2=7&str1=buzz&str2=fizz&limit=100", http.StatusOK},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&str2=buzz&str1=fizz&limit=15", http.StatusOK},
+		// HEAD does the same work as GET, so it counts as a hit too
+		{http.MethodHead, "/fizzbuzz?str1=fizz&str2=buzz&limit=15&int1=3&int2=5", http.StatusOK},
+		{http.MethodHead, "/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
+		{http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=5000&str1=fizz&str2=buzz", http.StatusBadRequest},
 	}
 
 	statistics := stats.NewCounter[fizzbuzz.Params]()
@@ -544,7 +552,7 @@ func TestStatistics_counts_successful_fizzbuzz_requests(t *testing.T) {
 	handler := api.New(fizzbuzz.DefaultGenerator(), statistics)
 
 	for index, tc := range fizzBuzzTargets {
-		statusCode, _, _ := doRequest(t, handler, http.MethodGet, tc.target)
+		statusCode, _, _ := doRequest(t, handler, tc.method, tc.target)
 
 		if statusCode != tc.statusCode {
 			t.Fatalf("unexpected http status code on request #%d (got: %v, expected: %v)", index, statusCode, tc.statusCode)
@@ -563,8 +571,8 @@ func TestStatistics_counts_successful_fizzbuzz_requests(t *testing.T) {
 
 	statisticsBody := decodeJSON[api.StatisticsBody](t, responseBody)
 
-	if statisticsBody.Hits != 3 {
-		t.Fatalf("unexpected top statistics: hits (got: %v, expected: %v)", statisticsBody.Hits, 3)
+	if statisticsBody.Hits != 4 {
+		t.Fatalf("unexpected top statistics: hits (got: %v, expected: %v)", statisticsBody.Hits, 4)
 	}
 
 	if statisticsBody.Params == nil {
@@ -650,5 +658,44 @@ func TestFizzBuzzHandler_passes_params_and_result_through(t *testing.T) {
 
 	if result := decodeJSON[[]string](t, responseBody); !slices.Equal(result, canned) {
 		t.Fatalf("unexpected result (got: %v, expected: %v)", result, canned)
+	}
+}
+
+// failingWriter is an http.ResponseWriter whose body writes fail, as when the
+// client disconnects or the write timeout fires.
+type failingWriter struct{ *httptest.ResponseRecorder }
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestFizzBuzzHandler_does_not_record_if_response_write_fails(t *testing.T) {
+	t.Parallel()
+
+	statistics := expectRecords()(t)
+	handler := api.New(fizzbuzz.DefaultGenerator(), statistics)
+
+	request := httptest.NewRequest(http.MethodGet, "/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz", nil)
+
+	handler.ServeHTTP(failingWriter{httptest.NewRecorder()}, request)
+}
+
+// TestStatistics_counts_HEAD_over_real_server checks that a real HEAD request
+// is counted: net/http discards the body on HEAD without failing the write.
+func TestStatistics_counts_HEAD_over_real_server(t *testing.T) {
+	t.Parallel()
+
+	params := fizzbuzz.Params{Int1: 3, Int2: 5, Limit: 15, Str1: "fizz", Str2: "buzz"}
+
+	server := httptest.NewServer(api.New(fizzbuzz.DefaultGenerator(), expectRecords(params)(t)))
+	t.Cleanup(server.Close)
+
+	response, err := server.Client().Head(server.URL + "/fizzbuzz?int1=3&int2=5&limit=15&str1=fizz&str2=buzz")
+	if err != nil {
+		t.Fatalf("unexpected error on HEAD request: %v", err)
+	}
+
+	_ = response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code (got: %v, expected: %v)", response.StatusCode, http.StatusOK)
 	}
 }

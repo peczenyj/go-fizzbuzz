@@ -88,9 +88,11 @@ func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.statistics.Record(params)
-
-	writeJSON(w, http.StatusOK, result)
+	// Record only once the response is written: a request whose body could
+	// not be sent (client gone, write timeout) is not a successful request.
+	if err := writeJSON(w, http.StatusOK, result); err == nil {
+		a.statistics.Record(params)
+	}
 }
 
 // ParamsBody is the JSON form of a fizzbuzz request.
@@ -111,7 +113,7 @@ type StatisticsBody struct {
 
 func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
-		writeJSON(w, http.StatusBadRequest, &ErrorBody{Error: "unexpected parameter"})
+		_ = writeJSON(w, http.StatusBadRequest, &ErrorBody{Error: "unexpected parameter"})
 
 		return
 	}
@@ -122,10 +124,12 @@ func (a *API) handleStatistics(w http.ResponseWriter, r *http.Request) {
 		body.Hits = hits
 	}
 
-	writeJSON(w, http.StatusOK, &body)
+	_ = writeJSON(w, http.StatusOK, &body)
 }
 
-func writeJSON(w http.ResponseWriter, statusCode int, result any) {
+// writeJSON writes result as the JSON body with statusCode. The returned
+// error is already logged; callers only need it to know if the body was sent.
+func writeJSON(w http.ResponseWriter, statusCode int, result any) error {
 	w.Header().Set(contentTypeHeader, mediaTypeJSON)
 
 	w.WriteHeader(statusCode)
@@ -139,6 +143,8 @@ func writeJSON(w http.ResponseWriter, statusCode int, result any) {
 		slog.Warn("unexpected error while perform json encode on result",
 			slog.Any("error", err))
 	}
+
+	return err
 }
 
 // ErrorBody is the JSON body of every 4xx/5xx response; Field and Reason are
@@ -151,7 +157,7 @@ type ErrorBody struct {
 
 func writeError(w http.ResponseWriter, err error) {
 	if pe, ok := errors.AsType[*fizzbuzz.ParamError](err); ok {
-		writeJSON(w, http.StatusBadRequest, &ErrorBody{
+		_ = writeJSON(w, http.StatusBadRequest, &ErrorBody{
 			Error:  `invalid parameter`,
 			Field:  string(pe.Field),
 			Reason: pe.Err.Error(),
@@ -162,5 +168,5 @@ func writeError(w http.ResponseWriter, err error) {
 
 	slog.Error("unexpected error", slog.Any("error", err))
 
-	writeJSON(w, http.StatusInternalServerError, &ErrorBody{Error: `internal error`})
+	_ = writeJSON(w, http.StatusInternalServerError, &ErrorBody{Error: `internal error`})
 }
