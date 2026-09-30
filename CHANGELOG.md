@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- An invalid flag no longer hides invalid `FIZZBUZZ_*` environment variables:
+  both are reported in the same run.
+
 ## [0.3.0] - 2026-09-30
 
 ### Added

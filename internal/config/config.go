@@ -86,7 +86,12 @@ func Parse(name string, args []string, getenv func(string) string, output io.Wri
 			return Config{}, err
 		}
 
-		return Config{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		// Report the invalid environment too, so that one run shows every error.
+		if envErr != nil {
+			fmt.Fprintf(output, "%s: %v\n", name, envErr)
+		}
+
+		return Config{}, errors.Join(fmt.Errorf("%w: %w", ErrInvalid, err), envErr)
 	}
 
 	if cfg.ShowVersion {

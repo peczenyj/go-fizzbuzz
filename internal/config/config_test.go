@@ -183,6 +183,29 @@ func TestParse_reports_every_invalid_env(t *testing.T) {
 	}
 }
 
+func TestParse_reports_invalid_env_with_invalid_flag(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+
+	_, err := config.Parse("fizzbuzz", []string{"-port=80"}, env(map[string]string{
+		config.EnvMaxLimit: "many",
+	}), &output)
+	if !errors.Is(err, config.ErrInvalid) {
+		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
+	}
+
+	for _, want := range []string{"flag provided but not defined: -port", `FIZZBUZZ_MAX_LIMIT="many"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("error not reported (got: %q, expected to contain: %q)", output.String(), want)
+		}
+
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
+		}
+	}
+}
+
 func TestParse_help(t *testing.T) {
 	t.Parallel()
 
