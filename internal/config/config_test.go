@@ -183,6 +183,29 @@ func TestParse_reports_every_invalid_env(t *testing.T) {
 	}
 }
 
+func TestParse_reports_invalid_env_with_invalid_flag(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+
+	_, err := config.Parse("fizzbuzz", []string{"-port=80"}, env(map[string]string{
+		config.EnvMaxLimit: "many",
+	}), &output)
+	if !errors.Is(err, config.ErrInvalid) {
+		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
+	}
+
+	for _, want := range []string{"flag provided but not defined: -port", `FIZZBUZZ_MAX_LIMIT="many"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("error not reported (got: %q, expected to contain: %q)", output.String(), want)
+		}
+
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
+		}
+	}
+}
+
 func TestParse_help(t *testing.T) {
 	t.Parallel()
 
@@ -195,6 +218,28 @@ func TestParse_help(t *testing.T) {
 
 	// the usage names every flag and its environment variable
 	for _, want := range []string{"-addr", config.EnvAddr, "-log-level", "-version"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("usage does not mention %s: %q", want, output.String())
+		}
+	}
+}
+
+func TestParse_help_keeps_defaults_with_invalid_env(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+
+	_, err := config.Parse("fizzbuzz", []string{"-h"}, env(map[string]string{
+		config.EnvLogLevel:        "verbose",
+		config.EnvMaxLimit:        "many",
+		config.EnvShutdownTimeout: "soon",
+	}), &output)
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("unexpected error (got: %v, expected: %v)", err, flag.ErrHelp)
+	}
+
+	// an invalid value must not replace the built-in default shown in the usage
+	for _, want := range []string{"(default INFO)", "(default 1024)", "(default 10s)"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("usage does not mention %s: %q", want, output.String())
 		}
