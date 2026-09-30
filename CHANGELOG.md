@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   both are reported in the same run.
 - An invalid `FIZZBUZZ_*` environment variable no longer hides the flag's
   default in the `-h` usage.
+- Every invalid setting is reported at startup, not just the first one:
+  environment variables, unexpected arguments, and invalid values.
 
 ## [0.3.0] - 2026-09-30
 

@@ -204,6 +204,41 @@ func TestParse_reports_invalid_env_with_invalid_flag(t *testing.T) {
 			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
 		}
 	}
+
+	// flag reports its own error: it must not be printed a second time
+	if n := strings.Count(output.String(), "flag provided but not defined"); n != 1 {
+		t.Fatalf("flag error reported %d times: %q", n, output.String())
+	}
+}
+
+func TestParse_reports_every_error(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+
+	_, err := config.Parse("fizzbuzz", []string{"-addr=localhost", "-shutdown-timeout=0s", "extra"}, env(map[string]string{
+		config.EnvMaxLimit:  "many",
+		config.EnvLogFormat: "xml",
+	}), &output)
+	if !errors.Is(err, config.ErrInvalid) {
+		t.Fatalf("unexpected error (got: %v, expected: %v)", err, config.ErrInvalid)
+	}
+
+	for _, want := range []string{
+		`FIZZBUZZ_MAX_LIMIT="many"`,
+		`unexpected arguments ["extra"]`,
+		`addr "localhost"`,
+		`log format "xml"`,
+		"shutdown timeout 0s: must be positive",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("error not reported (got: %q, expected to contain: %q)", output.String(), want)
+		}
+
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error not returned (got: %q, expected to contain: %q)", err.Error(), want)
+		}
+	}
 }
 
 func TestParse_help(t *testing.T) {
@@ -231,7 +266,8 @@ func TestParse_help_keeps_defaults_with_invalid_env(t *testing.T) {
 
 	_, err := config.Parse("fizzbuzz", []string{"-h"}, env(map[string]string{
 		config.EnvLogLevel:        "verbose",
-		config.EnvMaxLimit:        "many",
+		config.EnvMaxLimit:        "99999999999999999999", // out of range: Atoi returns math.MaxInt with its error
+		config.EnvMaxStringLength: "-99999999999999999999",
 		config.EnvShutdownTimeout: "soon",
 	}), &output)
 	if !errors.Is(err, flag.ErrHelp) {
@@ -239,7 +275,7 @@ func TestParse_help_keeps_defaults_with_invalid_env(t *testing.T) {
 	}
 
 	// an invalid value must not replace the built-in default shown in the usage
-	for _, want := range []string{"(default INFO)", "(default 1024)", "(default 10s)"} {
+	for _, want := range []string{"(default INFO)", "(default 1024)", "(default 64)", "(default 10s)"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("usage does not mention %s: %q", want, output.String())
 		}
