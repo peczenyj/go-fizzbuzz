@@ -260,25 +260,26 @@ $ make help
 These are indicative numbers from a laptop, not a benchmark. I ran `scripts/loadtest.sh` ([hey](https://github.com/rakyll/hey), 50 connections, 30 s per scenario) against the released image:
 
 ```console
-$ docker run --rm --cpus=2 -p 8080:8080 ghcr.io/peczenyj/go-fizzbuzz:v0.2.0
+$ docker run --rm --cpus=2 -p 8080:8080 ghcr.io/peczenyj/go-fizzbuzz:v0.3.2
 $ scripts/loadtest.sh
 ```
 
-Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Intel i7-1185G7, 8 CPUs) using the remaining cores.
+Setup: v0.3.2 (measured 1 October 2026), server limited to **2 CPUs**; `hey` ran on the same machine (Intel i7-1185G7, 8 CPUs) using the remaining cores.
 
-| Scenario | Req/s | p50 | p95 | p99 | Status | Req/s in v0.1.0 |
-|---|---:|---:|---:|---:|---|---:|
-| healthz | 60060 | 0.6 ms | 1.7 ms | 2.5 ms | 200 | 62695 |
-| classic 1..100 | 38964 | 1.2 ms | 2.7 ms | 3.4 ms | 200 | 35329 |
-| max limit 1024 | 15542 | 2.9 ms | 7.3 ms | 9.0 ms | 200 | 14516 |
-| worst case (~790 KB) | 1495 | 32.7 ms | 51.8 ms | 73.4 ms | 200 | 1504 |
-| invalid (400) | 41352 | 1.1 ms | 2.5 ms | 3.3 ms | 400 | 41268 |
-| statistics | 45851 | 1.0 ms | 2.2 ms | 2.9 ms | 200 | — |
+| Scenario | Req/s | p50 | p95 | p99 | Status | Req/s in v0.2.0 | Req/s in v0.1.0 |
+|---|---:|---:|---:|---:|---|---:|---:|
+| healthz | 59691 | 0.7 ms | 1.7 ms | 2.2 ms | 200 | 60060 | 62695 |
+| classic 1..100 | 38320 | 1.2 ms | 2.8 ms | 3.4 ms | 200 | 38964 | 35329 |
+| max limit 1024 | 15340 | 2.9 ms | 7.4 ms | 9.1 ms | 200 | 15542 | 14516 |
+| worst case (~790 KB) | 1489 | 32.9 ms | 51.3 ms | 73.7 ms | 200 | 1495 | 1504 |
+| invalid (400) | 41280 | 1.1 ms | 2.5 ms | 3.2 ms | 400 | 41352 | 41268 |
+| statistics | 46129 | 1.0 ms | 2.2 ms | 2.8 ms | 200 | 45851 | — |
 
 - **Normal requests:** sub-millisecond medians, and p99 under 10 ms even at `limit=1024`.
 - **Invalid requests** are cheaper than valid ones, because they are rejected before any generation.
-- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 73 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
-- **Recording statistics has no measurable cost.** Every scenario is within run-to-run variation of v0.1.0, which had no statistics (both directions: `healthz` is 4% slower, `classic` 10% faster). `/statistics` itself answers at about 46,000 requests per second.
+- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 74 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
+- **No change since v0.2.0.** Every scenario is within 2% of v0.2.0: the releases since then changed configuration, CI and documentation, not the request path.
+- **Recording statistics has no measurable cost.** When statistics were added in v0.2.0, every scenario stayed within run-to-run variation of v0.1.0, which had no statistics (both directions: `healthz` is 4% slower, `classic` 10% faster). `/statistics` itself answers at about 46,000 requests per second.
 - `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
 ### Benchmarks
