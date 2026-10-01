@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The generator finds multiples of `int1` and `int2` with countdown counters
+  instead of two modulo operations per element. Generation is up to 41%
+  faster (label-only sequences); allocations are unchanged.
+
 ## [0.3.2] - 2026-09-30
 
 ### Changed
