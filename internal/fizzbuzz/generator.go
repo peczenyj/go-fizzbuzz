@@ -70,13 +70,31 @@ func (g *Generator) Generate(p Params) ([]string, error) {
 
 	fizzBuzz := p.Str1 + p.Str2
 
+	// Countdown counters replace two modulos per element: left1 reaches zero
+	// exactly at the multiples of Int1, and left2 at those of Int2. This
+	// relies on Int1 and Int2 being positive, which validateParameters checks.
+	left1, left2 := p.Int1, p.Int2
+
 	for i := 1; i <= p.Limit; i++ {
+		left1--
+		left2--
+
+		hit1, hit2 := left1 == 0, left2 == 0
+
+		if hit1 {
+			left1 = p.Int1
+		}
+
+		if hit2 {
+			left2 = p.Int2
+		}
+
 		switch {
-		case i%p.Int1 == 0 && i%p.Int2 == 0:
+		case hit1 && hit2:
 			result = append(result, fizzBuzz)
-		case i%p.Int1 == 0:
+		case hit1:
 			result = append(result, p.Str1)
-		case i%p.Int2 == 0:
+		case hit2:
 			result = append(result, p.Str2)
 		default:
 			result = append(result, strconv.Itoa(i))
