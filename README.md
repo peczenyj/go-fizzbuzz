@@ -1,5 +1,10 @@
 # go-fizzbuzz
 
+[![Latest release](https://img.shields.io/github/release/peczenyj/go-fizzbuzz.svg)](https://github.com/peczenyj/go-fizzbuzz/releases/latest)
+[![CI](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/ci.yml/badge.svg)](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/ci.yml)
+![Go Version](https://img.shields.io/badge/Go-%3E%3D%201.26-%23007d9c)
+[![codecov](https://codecov.io/gh/peczenyj/go-fizzbuzz/graph/badge.svg)](https://codecov.io/gh/peczenyj/go-fizzbuzz)
+
 A configurable fizz-buzz REST API written in Go, using only the standard library.
 
 ```console
