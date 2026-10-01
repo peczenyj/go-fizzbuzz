@@ -110,6 +110,17 @@ func TestWriteSequenceWriteError(t *testing.T) {
 	}
 }
 
+// TestWriteJSONWriteError covers writeJSON's error path, which /fizzbuzz
+// exercised before it moved to writeSequence.
+func TestWriteJSONWriteError(t *testing.T) {
+	t.Parallel()
+
+	err := writeJSON(&failingWriter{header: http.Header{}}, http.StatusOK, []string{"1"})
+	if !errors.Is(err, errWrite) {
+		t.Fatalf("unexpected error (got: %v, expect: %v)", err, errWrite)
+	}
+}
+
 // FuzzWriteSequence checks that writeSequence and writeJSON write the same
 // body, both for generated sequences and for sequences mixing any strings.
 func FuzzWriteSequence(f *testing.F) {
