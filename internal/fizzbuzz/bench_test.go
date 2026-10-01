@@ -1,6 +1,7 @@
 package fizzbuzz_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,6 +26,21 @@ func BenchmarkGenerate(b *testing.B) {
 
 			for b.Loop() {
 				if _, err := gen.Generate(bc.params); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkNewGenerator measures the one-off cost of precomputing the numbers.
+func BenchmarkNewGenerator(b *testing.B) {
+	for _, maxLimit := range []int{fizzbuzz.DefaultMaxLimit, 100_000} {
+		b.Run(strconv.Itoa(maxLimit), func(b *testing.B) {
+			b.ReportAllocs()
+
+			for b.Loop() {
+				if _, err := fizzbuzz.NewGenerator(maxLimit, fizzbuzz.DefaultMaxStringLength); err != nil {
 					b.Fatal(err)
 				}
 			}

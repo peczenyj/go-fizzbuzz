@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The generator precomputes the decimal strings for 0 to its max limit at
+  startup and reuses them. A `limit=1024` request makes 14 allocations instead
+  of 508, and is about 13% faster end to end. The cost is about 21 KB per
+  generator at the default max limit, and 2.1 MB at the 100 000 ceiling.
+
 ## [0.3.2] - 2026-09-30
 
 ### Changed

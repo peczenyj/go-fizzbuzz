@@ -11,6 +11,7 @@ import (
 type Generator struct {
 	maxLimit        int
 	maxStringLength int
+	numbers         []string // numbers[i] is strconv.Itoa(i), for i up to maxLimit
 }
 
 // DefaultGenerator returns a Generator allowing up to 1024 elements and
@@ -18,10 +19,7 @@ type Generator struct {
 // expand each byte up to 6× (e.g. "<" → "\u003c"), so the largest response
 // is about 790 KB (measured: 789 506 bytes).
 func DefaultGenerator() *Generator {
-	return &Generator{
-		maxLimit:        DefaultMaxLimit,
-		maxStringLength: DefaultMaxStringLength,
-	}
+	return newGenerator(DefaultMaxLimit, DefaultMaxStringLength)
 }
 
 // Hard ceilings for any Generator. Worst case per call:
@@ -36,6 +34,10 @@ const (
 // NewGenerator returns a Generator allowing up to maxLimit elements and labels
 // of up to maxStringLength bytes. Both must be between 1 and the hard ceilings
 // (100 000 and 255); otherwise the error wraps ErrTooLow or ErrTooBig.
+//
+// The Generator precomputes the decimal strings for 0 to maxLimit, so
+// Generate does not allocate per number: about 21 KB for the default limit
+// of 1024, and about 2.1 MB at the 100 000 ceiling.
 func NewGenerator(maxLimit, maxStringLength int) (*Generator, error) {
 	if maxLimit > maxLimitThreshold {
 		return nil, fmt.Errorf("invalid max limit %d: %w", maxLimit, ErrTooBig)
@@ -53,7 +55,18 @@ func NewGenerator(maxLimit, maxStringLength int) (*Generator, error) {
 		return nil, fmt.Errorf("invalid max string length %d: %w", maxStringLength, ErrTooLow)
 	}
 
-	return &Generator{maxLimit: maxLimit, maxStringLength: maxStringLength}, nil
+	return newGenerator(maxLimit, maxStringLength), nil
+}
+
+// newGenerator builds a Generator without checking its arguments.
+func newGenerator(maxLimit, maxStringLength int) *Generator {
+	numbers := make([]string, maxLimit+1)
+
+	for i := range numbers {
+		numbers[i] = strconv.Itoa(i)
+	}
+
+	return &Generator{maxLimit: maxLimit, maxStringLength: maxStringLength, numbers: numbers}
 }
 
 // Generate returns the fizzbuzz sequence for p: numbers from 1 to p.Limit,
@@ -79,7 +92,8 @@ func (g *Generator) Generate(p Params) ([]string, error) {
 		case i%p.Int2 == 0:
 			result = append(result, p.Str2)
 		default:
-			result = append(result, strconv.Itoa(i))
+			// i <= p.Limit <= g.maxLimit, checked by validateParameters.
+			result = append(result, g.numbers[i])
 		}
 	}
 

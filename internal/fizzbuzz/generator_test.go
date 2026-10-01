@@ -330,7 +330,37 @@ func TestGenerate(t *testing.T) {
 	}
 }
 
+// TestGenerateAtCeiling checks the largest sequence a Generator allows: the
+// precomputed numbers must cover maxLimit itself.
+func TestGenerateAtCeiling(t *testing.T) {
+	t.Parallel()
+
+	const ceiling = 100_000
+
+	generator, err := fizzbuzz.NewGenerator(ceiling, 1)
+	if err != nil {
+		t.Fatalf("unexpected error from NewGenerator: %v", err)
+	}
+
+	// 99 999 and 100 000 are not multiples of 7 or 11, so both print as numbers.
+	result, err := generator.Generate(fizzbuzz.Params{Int1: 7, Int2: 11, Limit: ceiling, Str1: "a", Str2: "b"})
+	if err != nil {
+		t.Fatalf("unexpected error from generate: %v", err)
+	}
+
+	if len(result) != ceiling {
+		t.Fatalf("unexpected length (got: %d, expect: %d)", len(result), ceiling)
+	}
+
+	if got := result[ceiling-2:]; !slices.Equal(got, []string{"99999", "100000"}) {
+		t.Fatalf("unexpected tail (got: %v, expect: [99999 100000])", got)
+	}
+}
+
 func FuzzGenerate(f *testing.F) {
+	// A Generator is immutable: build it once, not per input.
+	generator := fizzbuzz.DefaultGenerator()
+
 	f.Add(3, 5, 15, "fizz", "buzz")
 	f.Add(1, 1, 1, "a", "b")
 	f.Add(0, 5, 10, "x", "y")
@@ -341,8 +371,6 @@ func FuzzGenerate(f *testing.F) {
 		}
 
 		params := fizzbuzz.Params{Int1: int1, Int2: int2, Limit: limit, Str1: str1, Str2: str2}
-
-		generator := fizzbuzz.DefaultGenerator()
 
 		out, err := generator.Generate(params)
 		if err != nil {
