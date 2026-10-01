@@ -283,21 +283,23 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 ### Benchmarks
 
-`make bench` isolates the code from the HTTP stack and the network. These are medians of 5 runs (`-count=5`) on the same laptop, Go 1.27, so again indicative only.
+`make bench` isolates the code from the HTTP stack and the network. These are medians of 5 runs (`-count=5`) on the same laptop, Go 1.27, so again indicative only. The limit 1024 and `NewGenerator` rows were measured after numbers were precomputed (medians of 10 runs, interleaved with the previous version).
 
 | Benchmark | Time/op | Memory/op | Allocs/op |
 |---|---:|---:|---:|
 | `Generate` classic 1..100 | 0.70 µs | 1.8 KB | 2 |
-| `Generate` limit 1024 | 11.8 µs | 20 KB | 496 |
+| `Generate` limit 1024 | 7.2 µs | 18 KB | 2 |
 | `Generate` limit 1024, 64-byte labels | 6.5 µs | 18.6 KB | 2 |
 | handler classic 1..100 | 5.0 µs | 2.5 KB | 14 |
-| handler limit 1024 | 42.5 µs | 20.8 KB | 508 |
+| handler limit 1024 | 30.3 µs | 18.7 KB | 14 |
 | handler worst case (~790 KB) | 815 µs | 20–32 KB | 16 |
 | `Counter.Record`, 1 goroutine | 30 ns | 0 | 0 |
 | `Counter.Record`, 8 goroutines | 88 ns | 0 | 0 |
+| `NewGenerator`, max limit 1024 (once, at startup) | 16.5 µs | 21 KB | 927 |
+| `NewGenerator`, max limit 100 000 (once, at startup) | 2.4 ms | 2.1 MB | 99,903 |
 
 - **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: escaping 790 KB of output takes about 800 µs. A faster encoder or streaming would be the next optimization, not the generator.
-- **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slice and the `str1str2` label. With only labels, it's 2 allocations whatever the size.
+- **Numbers are precomputed, so generation allocates twice whatever the request.** `strconv.Itoa` allocates a new string for every number from 100 up: 494 allocations at `limit=1024`. The generator now builds the strings for 0 to its max limit once, at startup, and reuses them, so `Generate` makes only the slice and the `str1str2` label. At `limit=1024`, the handler drops from 508 to 14 allocations and from 35.0 µs to 30.3 µs (−13%); generation alone is 44% faster. The cost is paid once: 21 KB at the default max limit, 2.1 MB at the 100 000 ceiling.
 - **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), nearly 300× the measured `/fizzbuzz` rate of about 39,000 requests per second on 2 CPUs.
 
 ## Limitations and next steps
