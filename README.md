@@ -37,7 +37,7 @@ The output would look like this: "1,2,fizz,4,buzz,fizz,7,8,fizz,buzz,11,fizz,13,
 
 Your goal is to implement a web server that will expose a REST API endpoint that:
 - Accepts five parameters: three integers int1, int2 and limit, and two strings str1 and str2.
-- Returns a list of strings with numbers from 1 to limit, where: all multiples of int1 are replaced by str1, all multiples of int2 are replaced by str2, all multiples of int1 and int2 are replaced by [...]
+- Returns a list of strings with numbers from 1 to limit, where: all multiples of int1 are replaced by str1, all multiples of int2 are replaced by str2, all multiples of int1 and int2 are replaced by str1str2.
  
 The server needs to be:
 - Ready for production
@@ -74,7 +74,7 @@ The server listens on `:8080` by default and stops gracefully on `SIGINT` or `SI
 
 ## Configuration
 
-Every setting is a command-line flag whose default comes from an environment variable, so the precedence is **flag > environment variable > built-in default**. Flags suit local use; environment va[...]
+Every setting is a command-line flag whose default comes from an environment variable, so the precedence is **flag > environment variable > built-in default**. Flags suit local use; environment variables suit containers and Kubernetes, without changing the image's entry point.
 
 | Flag | Environment variable | Default | Accepted values |
 |---|---|---|---|
@@ -93,7 +93,7 @@ $ docker run --rm ghcr.io/peczenyj/go-fizzbuzz:latest -version
 go-fizzbuzz v0.3.2 (revision …)
 ```
 
-- **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Each environment variable is checked like its flag, ev[...]
+- **Invalid values stop the server at startup** with exit code 2 and a message naming the flag or variable, instead of falling back to a default. Each environment variable is checked like its flag, even when a flag replaces it, and every invalid one is reported at once, together with an invalid flag or unexpected arguments. Parsing stops at the first invalid flag or argument, so the flag values before it are only checked once it is fixed.
 - **The limits are validated by `fizzbuzz.NewGenerator`**, which owns the hard ceilings, so the configuration doesn't duplicate the domain rules.
 - `-h` lists every flag with its environment variable and default:
 
@@ -188,8 +188,8 @@ The endpoint accepts no parameter: any query string returns `400` with `{"error"
 
 To keep the server production-ready and easy to maintain, I made the following choices:
 
-- **Standard library only.** `net/http` routing (method patterns, Go 1.22+), `encoding/json` and `log/slog` cover everything the brief needs. There are no runtime dependencies to audit or upgrade[...]
-- **Configuration with the standard `flag` package.** Environment variables provide the flag defaults, which gives the flag > env > default precedence without a configuration library. `config.Parse` t[...]
+- **Standard library only.** `net/http` routing (method patterns, Go 1.22+), `encoding/json` and `log/slog` cover everything the brief needs. There are no runtime dependencies to audit or upgrade.
+- **Configuration with the standard `flag` package.** Environment variables provide the flag defaults, which gives the flag > env > default precedence without a configuration library. `config.Parse` takes the arguments and a `getenv` function, so tests don't touch the process environment.
 - **No premature optimization.** Correctness and bounded resources come first.
 - **JSON array output.** Quoting separates values without ambiguity: `str1=a,b` can't be read as two elements. HTML-sensitive characters are escaped.
 - **Strict input.** Every parameter is required. Values that are missing, not integers, or out of range are rejected with a `400` that names the field. There are no silent defaults.
@@ -200,7 +200,7 @@ To keep the server production-ready and easy to maintain, I made the following c
 - **The domain is separate from HTTP.**
   - `internal/fizzbuzz` holds the rules: parsing (`Params.Parse`), validation, and generation. It depends on a minimal `QueryValues` interface (`url.Values` satisfies it), not on `net/http`.
   - `internal/api` translates between HTTP and the domain. It depends on two small interfaces, `Generator` and `Statistics`, defined where they are used, so tests can replace them with fakes.
-- **Statistics as a generic counter.** `internal/stats` provides `Counter[K comparable]`, a mutex-protected map that knows nothing about fizzbuzz. It is used with `fizzbuzz.Params` as the key, which i[...]
+- **Statistics as a generic counter.** `internal/stats` provides `Counter[K comparable]`, a mutex-protected map that knows nothing about fizzbuzz. It is used with `fizzbuzz.Params` as the key, which is comparable because it has only `int` and `string` fields.
   - Counts only ever increase, so the top can change only on the key just incremented. `Record` and `Top` are O(1): there is no scan and no sort.
   - Only successful requests are recorded, after the response is written, so invalid requests can't make themselves the most frequent, and a response that never reached the client doesn't count.
 - **Typed errors.** `ParamError{Field, Err}` wraps sentinel errors. The API maps it to a `400` with `errors.As`, and tests match reasons with `errors.Is`.
@@ -240,12 +240,12 @@ $ make help
   clean    Remove build artefacts
 ```
 
-- **Tests** are table-driven and use only the standard `testing` package. They cover parsing, validation, generation, routing (`404`, `405`, `HEAD`), error bodies, and a `500` path that must not [...]
+- **Tests** are table-driven and use only the standard `testing` package. They cover parsing, validation, generation, routing (`404`, `405`, `HEAD`), error bodies, and a `500` path that must not leak the internal error.
 - **Fuzzing:**
   - `FuzzGenerate` checks that the output has `limit` elements, each one correct, or that the error is a `ParamError`.
   - `FuzzParseParams` checks that any query string yields only the documented parse errors.
   - Run `make fuzz FUZZTIME=10s`.
-- **Benchmarks:** `make bench` runs benchmarks for generation, the full handler and the statistics counter, with allocation stats. Results are under [Performance](#performance).
+- **Benchmarks:** `make bench` runs `testing.B` benchmarks for generation, the full handler and the statistics counter, with allocation stats. Results are under [Performance](#performance).
 - **Linting:** `golangci-lint` v2, configured in `.golangci.yml`. It also requires doc comments on exported identifiers.
 - **CI (GitHub Actions)** runs on pushes to `main` and `devel`, on version tags, and on pull requests:
   - lint
@@ -277,8 +277,8 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 
 - **Normal requests:** sub-millisecond medians, and p99 under 10 ms even at `limit=1024`.
 - **Invalid requests** are cheaper than valid ones, because they are rejected before any generation.
-- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 73 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could[...]
-- **Recording statistics has no measurable cost.** Every scenario is within run-to-run variation of v0.1.0, which had no statistics (both directions: `healthz` is 4% slower, `classic` 10% faster). `/s[...]
+- **Worst case:** about 1.2 GB/s of JSON from 2 CPUs, with p99 at 73 ms. Response size, not request count, drives the cost. That is why the input limits matter: without them, a few such requests could saturate the service.
+- **Recording statistics has no measurable cost.** Every scenario is within run-to-run variation of v0.1.0, which had no statistics (both directions: `healthz` is 4% slower, `classic` 10% faster). `/statistics` itself answers at about 46,000 requests per second.
 - `hey` computes percentiles over at most 1,000,000 responses. Where a run went past that, the percentiles cover its first million responses.
 
 ### Benchmarks
@@ -296,26 +296,26 @@ Setup: v0.2.0, server limited to **2 CPUs**; `hey` ran on the same machine (Inte
 | `Counter.Record`, 1 goroutine | 30 ns | 0 | 0 |
 | `Counter.Record`, 8 goroutines | 88 ns | 0 | 0 |
 
-- **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: esca[...]
-- **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slic[...]
-- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), nearly 300× the measured `/fizzbuz[...]
+- **JSON encoding dominates.** For the classic request, generation is about 15% of the handler time; the rest is routing, parsing and, mostly, encoding. In the worst case, generation is under 1%: escaping 790 KB of output takes about 800 µs. A faster encoder or streaming would be the next optimization, not the generator.
+- **Allocations come from numbers, not labels.** `strconv.Itoa` returns cached strings below 100, so allocations appear only for printed numbers from 100 up: 494 of them at `limit=1024`, plus the slice and the `str1str2` label. With only labels, it's 2 allocations whatever the size.
+- **The lock is not a bottleneck.** `Counter.Record` never allocates. Under 8-way contention, it still handles about 11 million records per second (1 / 88 ns), nearly 300× the measured `/fizzbuzz` rate of about 39,000 requests per second on 2 CPUs.
 
 ## Limitations and next steps
 
-- **Statistics are in memory and per instance.** They are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example[...]
-- **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests [...]
-- **One lock for all requests.** Every successful request takes the counter's mutex. The benchmark shows about 11 million records per second under 8-way contention, far above the request rate, so this[...]
+- **Statistics are in memory and per instance.** They are lost on restart and wrong behind several replicas, since each instance counts only its own traffic. A shared store would fix both, for example Redis: `ZINCRBY` on each request, `ZREVRANGE … 0 0 WITHSCORES` for the top.
+- **Statistics memory is unbounded.** Every distinct successful request adds a key: up to a few hundred bytes with the current input limits, and never removed. A client sending many distinct requests grows the map for as long as the process runs. To bound it, cap the number of keys or use a heavy-hitters algorithm (Space-Saving, Misra–Gries) that finds the most frequent items in fixed memory.
+- **One lock for all requests.** Every successful request takes the counter's mutex. The benchmark shows about 11 million records per second under 8-way contention, far above the request rate, so this is fine at this scale; if profiling ever shows contention, shard the counter.
 - **Statistics can't be disabled.** Next: a `-statistics=false` flag that removes the `/statistics` route and stops recording, rather than serving an empty result.
-- **No configuration file.** Flags and environment variables cover the current settings. A file (YAML or TOML) would only be worth it with many more settings, or with settings that change without a re[...]
+- **No configuration file.** Flags and environment variables cover the current settings. A file (YAML or TOML) would only be worth it with many more settings, or with settings that change without a restart.
 - **Observability.** Structured logs with `slog`, but no metrics yet. Next: Prometheus metrics for request count, latency and response size per status, served on a separate port.
 - **Streaming.** The response is built in memory. That is fine with the current limits (under 1 MB). Much larger limits would call for streaming the JSON array instead.
-- **The OpenAPI description is written by hand.** CI checks that it is valid, but no test checks the server's responses against it, so the two can drift apart. A contract test would need a third-party[...]
+- **The OpenAPI description is written by hand.** CI checks that it is valid, but no test checks the server's responses against it, so the two can drift apart. A contract test would need a third-party OpenAPI validator, or the spec could be generated from the code.
 - **Rate limiting.** I left it out of the service on purpose; I'd expect it at the ingress or API gateway.
 
 ## How I worked
 
-I wrote the core myself (API, domain, statistics, tests) and used Claude Code for reviews; the benchmarks and the configuration package were implemented by Claude Code under my direction and reviewed [...]
+I wrote the core myself (API, domain, statistics, tests) and used Claude Code for reviews; the benchmarks and the configuration package were implemented by Claude Code under my direction and reviewed by me.
 
-I started with a simple approach: the default HTTP server, a function generating the fizzbuzz sequence, and implicit defaults when a query parameter was missing. The first problem I identified was the[...]
+I started with a simple approach: the default HTTP server, a function generating the fizzbuzz sequence, and implicit defaults when a query parameter was missing. The first problem I identified was the size of the fizzbuzz sequence: it can be huge depending on the parameters, and it can use a lot of resources unnecessarily. I decided to set strict limits to avoid this scenario. Once this became more explicit in the code, I started refactoring the internal code until I reached the current design.
 
-There is room for improvement, but I decided to wait for feedback instead of implementing everything. There are also several third-party libraries that could reduce the amount of code I wrote, like [v[...]
+There is room for improvement, but I decided to wait for feedback instead of implementing everything. There are also several third-party libraries that could reduce the amount of code I wrote, like [validator](https://github.com/go-playground/validator), [gorilla schema](https://github.com/gorilla/schema), [testify](https://github.com/stretchr/testify), [go-json](https://github.com/goccy/go-json) and many more.
