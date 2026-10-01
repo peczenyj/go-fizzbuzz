@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `/fizzbuzz` writes the JSON array itself instead of using `encoding/json`
+  for the whole sequence: numbers are copied as is, each label is escaped once
+  per request instead of once per element, and the body goes out through a
+  pooled 32 KB buffer. The body is byte for byte the same (`FuzzWriteSequence`
+  checks it). The worst-case response (1024 escaped 64-byte labels) takes
+  32 µs instead of 702 µs; the classic request is 23% faster.
+- `make fuzz` takes `package:target` pairs, and also runs `FuzzWriteSequence`.
+
 ## [0.3.2] - 2026-09-30
 
 ### Changed
