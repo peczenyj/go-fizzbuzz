@@ -1,7 +1,7 @@
 # go-fizzbuzz
 
 [![Latest release](https://img.shields.io/github/release/peczenyj/go-fizzbuzz.svg)](https://github.com/peczenyj/go-fizzbuzz/releases/latest)
-[![Go package](https://pkg.go.dev/badge/github.com/peczenyj/go-fizzbuzz.svg)](https://pkg.go.dev/github.com/peczenyj/go-fizzbuzz)
+[![Container package](https://img.shields.io/badge/container-ghcr.io%2Fgo--fizzbuzz-blue)](https://github.com/peczenyj/go-fizzbuzz/pkgs/container/go-fizzbuzz)
 [![CI](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/ci.yml/badge.svg)](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/peczenyj/go-fizzbuzz/actions/workflows/github-code-scanning/codeql)
 ![Go Version](https://img.shields.io/badge/Go-%3E%3D%201.26-%23007d9c)
