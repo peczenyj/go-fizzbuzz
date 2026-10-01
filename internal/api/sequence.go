@@ -87,11 +87,7 @@ func encodeSequence(bw *bufio.Writer, seq []string) error {
 
 		b := lookup(escaped[:known], s)
 		if b == nil {
-			var err error
-
-			if b, err = json.Marshal(s); err != nil {
-				return err
-			}
+			b, _ = json.Marshal(s) // a string always marshals: any byte is escaped, none rejected
 
 			if known < maxEscaped {
 				escaped[known] = escapedString{s: s, json: b}
