@@ -90,7 +90,7 @@ func (a *API) handleFizzBuzz(w http.ResponseWriter, r *http.Request) {
 
 	// Record only once the response is written: a request whose body could
 	// not be sent (client gone, write timeout) is not a successful request.
-	if err := writeJSON(w, http.StatusOK, result); err == nil {
+	if err := writeSequence(w, http.StatusOK, result); err == nil {
 		a.statistics.Record(params)
 	}
 }

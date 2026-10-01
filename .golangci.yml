@@ -20,11 +20,21 @@ linters:
     errcheck:
       # Usage and error messages written to stdout/stderr are best-effort:
       # the server can do nothing useful if that write fails.
+      #
+      # bufio.Writer errors are sticky: Flush, which is checked, reports the
+      # first one.
       exclude-functions:
         - fmt.Fprintf
         - fmt.Fprintln
+        - (*bufio.Writer).Write
+        - (*bufio.Writer).WriteByte
+        - (*bufio.Writer).WriteString
     gocyclo:
       min-complexity: 15
+    gosec:
+      # G104 (unchecked errors) duplicates errcheck, without its exclusions.
+      excludes:
+        - G104
     revive:
       severity: warning
   exclusions:

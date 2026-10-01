@@ -25,12 +25,14 @@ cover: ## Run tests with a coverage summary
 	$(GO) test -race -covermode=atomic -coverprofile=coverage.out ./...
 	$(GO) tool cover -func=coverage.out | tail -1
 
-FUZZ_TARGETS ?= FuzzGenerate FuzzParseParams
+# package:target pairs
+FUZZ_TARGETS ?= fizzbuzz:FuzzGenerate fizzbuzz:FuzzParseParams api:FuzzWriteSequence
 
 fuzz: ## Fuzz each target for FUZZTIME (default 30s)
-	@for target in $(FUZZ_TARGETS); do \
-		echo "=== $$target"; \
-		$(GO) test ./internal/fizzbuzz -run='^$$' -fuzz="^$$target\$$" -fuzztime=$(FUZZTIME) || exit 1; \
+	@for pair in $(FUZZ_TARGETS); do \
+		pkg=$${pair%%:*}; target=$${pair#*:}; \
+		echo "=== $$pkg $$target"; \
+		$(GO) test ./internal/$$pkg -run='^$$' -fuzz="^$$target\$$" -fuzztime=$(FUZZTIME) || exit 1; \
 	done
 
 bench: ## Run benchmarks with allocation stats
